@@ -1,0 +1,46 @@
+# Copyright 2025 Cockroach Labs, Inc.
+#
+# All rights reserved.
+
+name: blobcheck test
+run-name: blobcheck build run
+on:
+  workflow_call:
+  workflow_dispatch:
+jobs:
+  go-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # These are our primary supported versions.
+          - id: v25.2
+            cockroachdb: v25.2
+          - id: v25.1
+            cockroachdb: v25.1
+          - id: v24.3
+            cockroachdb: v24.3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: start_crdb
+        name: start database
+        working-directory: .github
+        run: >
+          docker compose up -d
+          minio cockroachdb-${{ matrix.cockroachdb }}
+
+      - id: setup_go
+        name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - id: install_tools
+        run: scripts/installTools.sh
+
+      - id: run_tests
+        run: go test ./... --race

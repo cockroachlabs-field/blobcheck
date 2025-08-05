@@ -1,0 +1,31 @@
+# Copyright 2025 Cockroach Labs, Inc.
+#
+# All rights reserved.
+
+services:
+
+  cockroachdb-v24.3:
+    image: cockroachdb/cockroach:latest-v24.3
+    entrypoint: /cockroach/cockroach
+    command: start-single-node --insecure --store type=mem,size=2G
+    network_mode: host
+
+  cockroachdb-v25.1:
+    image: cockroachdb/cockroach:latest-v25.1
+    entrypoint: /cockroach/cockroach
+    command: start-single-node --insecure --store type=mem,size=2G
+    network_mode: host
+
+  cockroachdb-v25.2:
+    image: cockroachdb/cockroach:latest-v25.2
+    entrypoint: /cockroach/cockroach
+    command: start-single-node --insecure --store type=mem,size=2G
+    network_mode: host
+
+  minio:
+      image: minio/minio
+      command: server --console-address ":9001" /data
+      network_mode: host
+      environment:
+        -  MINIO_ROOT_USER=cockroach
+        -  MINIO_ROOT_PASSWORD=cockroach

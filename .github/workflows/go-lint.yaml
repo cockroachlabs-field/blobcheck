@@ -1,0 +1,28 @@
+# Copyright 2025 Cockroach Labs, Inc.
+#
+# All rights reserved.
+
+name: blobcheck test
+run-name: blobcheck build run
+on:
+  workflow_call:
+  workflow_dispatch:
+jobs:
+  go-lints:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: setup_go
+        name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - id: install_tools
+        run: scripts/installTools.sh
+
+      - id: lint
+        name: Lints
+        run: scripts/lints.sh
+

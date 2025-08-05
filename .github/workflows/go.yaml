@@ -1,0 +1,17 @@
+# Copyright 2025 Cockroach Labs, Inc.
+#
+# All rights reserved.
+
+name: blobcheck Build
+run-name: blobcheck build
+on: 
+  push:
+    tags: [ 'v*.*.*' ]
+  pull_request:
+jobs:
+  go-test:
+    uses: ./.github/workflows/go-test.yaml
+  go-lints:
+    uses: ./.github/workflows/go-lint.yaml
+  go-build:
+    uses: ./.github/workflows/go-build.yaml

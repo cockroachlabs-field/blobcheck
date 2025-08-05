@@ -1,0 +1,50 @@
+# Copyright 2025 Cockroach Labs, Inc.
+#
+# All rights reserved.
+
+name: blobcheck build
+run-name: blobcheck build run
+on:
+  workflow_call:
+  workflow_dispatch:
+jobs:
+  go-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: setup_go
+        name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - id: install_tools
+        run: scripts/installTools.sh
+
+      - id: build-linux-amd64
+        run: GOOS=linux GOARCH=amd64 go build -o blobcheck-linux-amd64 .
+
+      - id: build-linux-arm
+        run: GOOS=linux GOARCH=arm64 go build -o blobcheck-linux-arm64 .
+
+      - id: build-macos-arm
+        run: GOOS=darwin GOARCH=arm64 go build -o blobcheck-darwin-arm64 .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: blobcheck-linux-amd64
+          path: blobcheck-linux-amd64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: blobcheck-linux-arm64
+          path: blobcheck-linux-arm64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: blobcheck-darwin-arm64
+          path: blobcheck-darwin-arm64
