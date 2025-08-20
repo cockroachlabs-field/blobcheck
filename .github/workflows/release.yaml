@@ -1,0 +1,67 @@
+# Copyright 2025 Cockroach Labs, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Release build
+on:
+  release:
+    types:
+      - created
+jobs:
+  build:
+    uses: ./.github/workflows/go-build.yaml
+  upload-asset:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: blobcheck-linux-amd64
+      - name: Upload asset
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: blobcheck-linux-amd64
+          asset_name: blobcheck-${{ github.event.release.tag_name }}-linux-amd64
+          asset_content_type: binary/octet-stream
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: blobcheck-linux-arm64
+      - name: Upload asset
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: blobcheck-linux-arm64
+          asset_name: blobcheck-${{ github.event.release.tag_name }}-linux-arm64
+          asset_content_type: binary/octet-stream
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: blobcheck-darwin-arm64
+      - name: Upload asset
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: blobcheck-darwin-arm64
+          asset_name: blobcheck-${{ github.event.release.tag_name }}-darwin-arm64
+          asset_content_type: binary/octet-stream

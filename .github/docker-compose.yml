@@ -1,0 +1,65 @@
+# Copyright 2025 Cockroach Labs, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+services:
+
+  cockroachdb-v24.3:
+    profiles: ["v24.3"]
+    image: cockroachdb/cockroach:latest-v24.3
+    entrypoint: /cockroach/cockroach
+    command: start-single-node --insecure --store type=mem,size=2G
+    network_mode: host
+
+  cockroachdb-v25.1:
+    profiles: ["v25.1"]
+    image: cockroachdb/cockroach:latest-v25.1
+    entrypoint: /cockroach/cockroach
+    command: start-single-node --insecure --store type=mem,size=2G
+    network_mode: host
+
+  cockroachdb-v25.2:
+    profiles: ["v25.2"]
+    image: cockroachdb/cockroach:latest-v25.2
+    entrypoint: /cockroach/cockroach
+    command: start-single-node --insecure --store type=mem,size=2G
+    network_mode: host
+
+  minio:
+      image: minio/minio
+      healthcheck:
+          test: ["CMD", "curl", "--fail", "http://localhost:29001/"]
+          interval: 30s
+          timeout: 10s
+          retries: 3
+          start_period: 5s
+      command: server --console-address ":29001" --address ":29000" /data
+      network_mode: host
+      environment:
+        -  MINIO_ROOT_USER=cockroach
+        -  MINIO_ROOT_PASSWORD=cockroach
+  create_bucket:
+      image: quay.io/minio/mc:RELEASE.2025-03-12T17-29-24Z
+      depends_on:
+        minio:
+          condition: service_healthy
+      network_mode: host
+      environment:
+        -  MINIO_ROOT_USER=cockroach
+        -  MINIO_ROOT_PASSWORD=cockroach
+      entrypoint: >
+        /bin/sh -c "
+        /usr/bin/mc alias set dockerminio http://localhost:29000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
+        /usr/bin/mc mb dockerminio/test;
+        exit 0;
+        "
