@@ -1,0 +1,54 @@
+# Copyright 2025 Cockroach Labs, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: blobcheck test
+run-name: blobcheck build run
+on:
+  workflow_call:
+  workflow_dispatch:
+jobs:
+  go-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # These are our primary supported versions.
+          - id: v25.2
+            cockroachdb: v25.2
+          - id: v25.1
+            cockroachdb: v25.1
+          - id: v24.3
+            cockroachdb: v24.3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: start_services
+        name: start services
+        working-directory: .github
+        run: docker compose --profile ${{ matrix.cockroachdb }} up -d
+
+      - id: setup_go
+        name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - id: install_tools
+        run: scripts/installTools.sh
+
+      - id: run_tests
+        run: go test ./... --race

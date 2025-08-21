@@ -1,0 +1,60 @@
+# Copyright 2025 Cockroach Labs, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: blobcheck build
+run-name: blobcheck build run
+on:
+  workflow_call:
+  workflow_dispatch:
+jobs:
+  go-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: setup_go
+        name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - id: install_tools
+        run: scripts/installTools.sh
+
+      - id: build-linux-amd64
+        run: GOOS=linux GOARCH=amd64 go build -o blobcheck-linux-amd64 .
+
+      - id: build-linux-arm
+        run: GOOS=linux GOARCH=arm64 go build -o blobcheck-linux-arm64 .
+
+      - id: build-macos-arm
+        run: GOOS=darwin GOARCH=arm64 go build -o blobcheck-darwin-arm64 .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: blobcheck-linux-amd64
+          path: blobcheck-linux-amd64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: blobcheck-linux-arm64
+          path: blobcheck-linux-arm64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: blobcheck-darwin-arm64
+          path: blobcheck-darwin-arm64
