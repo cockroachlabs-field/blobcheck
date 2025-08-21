@@ -12,10 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO(silvano): rename this package to "externalStorage"/"blobStorage"
 package store
+
+import (
+	"iter"
+	"slices"
+)
 
 // Params represents the parameters to be set for a destination to perform a backup/restore.
 type Params map[string]string
+
+func (p Params) sortedKeys() []string {
+	keys := make([]string, 0, len(p))
+	for k := range p {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+// Iter returns an iterator over the parameters sorted by key.
+func (p Params) Iter() iter.Seq2[string, string] {
+	return func(yield func(string, string) bool) {
+		for _, k := range p.sortedKeys() {
+			if !yield(k, p[k]) {
+				return
+			}
+		}
+	}
+}
 
 // Store represents a destination to perform a backup/restore.
 type Store interface {
