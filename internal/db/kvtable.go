@@ -63,16 +63,16 @@ DROP TABLE IF EXISTS %[1]s;`
 
 // Drop removes the table.
 func (t *KvTable) Drop(ctx *stopper.Context, conn *pgxpool.Conn) error {
-	slog.Info("Dropping table", slog.String("table", t.String()))
+	slog.Debug("Dropping table", slog.String("table", t.String()))
 	_, err := conn.Exec(ctx, fmt.Sprintf(dropTableStmt, t.String()))
 	return err
 }
 
 const insertTableStmt = `
-INSERT INTO %[1]s (k, v) values (@key, @value);`
+UPSERT INTO %[1]s (k, v) values (@key, @value);`
 
-// Insert adds a new row to the table.
-func (t *KvTable) Insert(ctx *stopper.Context, conn *pgxpool.Conn, key, value string) error {
+// Upsert adds a new row to the table.
+func (t *KvTable) Upsert(ctx *stopper.Context, conn *pgxpool.Conn, key, value string) error {
 	_, err := conn.Exec(ctx, fmt.Sprintf(insertTableStmt, t.String()), pgx.NamedArgs{
 		"key":   key,
 		"value": value,
@@ -87,7 +87,7 @@ func (t *KvTable) Restore(
 	ctx *stopper.Context, conn *pgxpool.Conn, from *ExternalConn, original *KvTable,
 ) error {
 	stmt := fmt.Sprintf(restoreTableStmt, original.String(), "LATEST", from, t.Database.Name)
-	slog.Info(stmt)
+	slog.Debug(stmt)
 	_, err := conn.Exec(ctx, stmt)
 	return err
 }

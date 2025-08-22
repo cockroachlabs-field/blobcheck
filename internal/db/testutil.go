@@ -64,7 +64,7 @@ func NewTestEnv(ctx *stopper.Context, numRows int) (TestEnv, error) {
 	}
 
 	for idx := range numRows {
-		if err := table.Insert(ctx, conn, fmt.Sprintf("key-%020d", idx), fmt.Sprintf("value-%020d", idx)); err != nil {
+		if err := table.Upsert(ctx, conn, fmt.Sprintf("key-%020d", idx), fmt.Sprintf("value-%020d", idx)); err != nil {
 			return TestEnv{}, err
 		}
 	}
