@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// TODO(silvano): rename this package to "externalStorage"/"blobStorage"
-package store
+// Package blob provides an interface for interacting with blob storage.
+package blob
 
 import (
 	"iter"
@@ -43,8 +43,8 @@ func (p Params) Iter() iter.Seq2[string, string] {
 	}
 }
 
-// Store represents a destination to perform a backup/restore.
-type Store interface {
+// Storage represents a destination to perform a backup/restore.
+type Storage interface {
 	// Params returns a copy of the params.
 	Params() Params
 	// URL returns a escaped URL.

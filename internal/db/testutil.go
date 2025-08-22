@@ -20,7 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/cockroachdb/field-eng-powertools/stopper"
-	"github.com/cockroachlabs-field/blobcheck/internal/store"
+	"github.com/cockroachlabs-field/blobcheck/internal/blob"
 )
 
 const (
@@ -33,7 +33,7 @@ const (
 type TestEnv struct {
 	Database Database
 	KvTable  KvTable
-	Store    store.Store
+	Blob     blob.Storage
 	Pool     *pgxpool.Pool
 }
 
@@ -64,7 +64,7 @@ func NewTestEnv(ctx *stopper.Context, numRows int) (TestEnv, error) {
 	}
 
 	for idx := range numRows {
-		if err := table.Insert(ctx, conn, fmt.Sprintf("key-%020d", idx), fmt.Sprintf("value-%020d", idx)); err != nil {
+		if err := table.Upsert(ctx, conn, fmt.Sprintf("key-%020d", idx), fmt.Sprintf("value-%020d", idx)); err != nil {
 			return TestEnv{}, err
 		}
 	}
@@ -87,22 +87,22 @@ func (e TestEnv) Cleanup(ctx *stopper.Context) error {
 	return nil
 }
 
-type testStore struct {
+type testBlobStorage struct {
 }
 
-var _ store.Store = &testStore{}
+var _ blob.Storage = &testBlobStorage{}
 
-// BucketName implements store.Store.
-func (t *testStore) BucketName() string {
+// BucketName implements blob.BlobStorage.
+func (t *testBlobStorage) BucketName() string {
 	return testBucket
 }
 
-// Params implements store.Store.
-func (t *testStore) Params() store.Params {
-	return store.Params{}
+// Params implements blob.BlobStorage.
+func (t *testBlobStorage) Params() blob.Params {
+	return blob.Params{}
 }
 
-// URL implements store.Store.
-func (t *testStore) URL() string {
+// URL implements blob.BlobStorage.
+func (t *testBlobStorage) URL() string {
 	return externalURL
 }

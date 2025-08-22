@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package store
+package blob
 
 import (
 	"context"
@@ -60,7 +60,7 @@ const (
 	DefaultRegion = "aws-global"
 )
 
-// ValidParams lists the valid parameters for the S3 store.
+// ValidParams lists the valid parameters for the S3 object storage.
 var ValidParams = []string{
 	AccountParam, SecretParam, TokenParam, EndPointParam,
 	RegionParam, UsePathStyleParam, SkipChecksum, SkipTLSVerify,
@@ -86,7 +86,7 @@ type s3Store struct {
 // S3FromEnv creates a new S3 store from the environment.
 // It will try to connect to the S3 service using the environment variables provided,
 // and adding any parameters that are required.
-func S3FromEnv(ctx *stopper.Context, env *env.Env) (Store, error) {
+func S3FromEnv(ctx *stopper.Context, env *env.Env) (Storage, error) {
 	creds, ok := lookupEnv(env, []string{AccountParam, SecretParam}, []string{TokenParam, RegionParam})
 	if !ok {
 		return nil, ErrMissingParam
@@ -105,7 +105,7 @@ func S3FromEnv(ctx *stopper.Context, env *env.Env) (Store, error) {
 	return initial.try(ctx, initial.BucketName())
 }
 
-// BucketName implements Store.
+// BucketName implements BlobStorage.
 func (s *s3Store) BucketName() string {
 	cleanedPath := path.Clean(s.dest)
 	components := strings.Split(cleanedPath, "/")
@@ -115,7 +115,7 @@ func (s *s3Store) BucketName() string {
 	return components[0]
 }
 
-// Params implements Store.
+// Params implements BlobStorage.
 func (s *s3Store) Params() Params {
 	params := maps.Clone(s.params)
 	for param := range params {
@@ -126,7 +126,7 @@ func (s *s3Store) Params() Params {
 	return params
 }
 
-// URL implements Store.
+// URL implements BlobStorage.
 func (s *s3Store) URL() string {
 	res := s.escapeValues()
 	res = fmt.Sprintf("s3://%s?%s", s.dest, res)
@@ -144,8 +144,8 @@ func (s *s3Store) addParam(key string, value string) error {
 
 // candidateConfigs provides a set of candidate configurations for the S3 store.
 // TODO(silvano): consider making this public.
-func (s *s3Store) candidateConfigs() iter.Seq[Store] {
-	return func(yield func(Store) bool) {
+func (s *s3Store) candidateConfigs() iter.Seq[Storage] {
+	return func(yield func(Storage) bool) {
 		combos := [][]string{
 			{}, // baseline first
 			{SkipChecksum},
@@ -211,7 +211,7 @@ const (
 )
 
 // try attempts to connect to the S3 store using alternative configurations.
-func (s *s3Store) try(ctx context.Context, bucketName string) (Store, error) {
+func (s *s3Store) try(ctx context.Context, bucketName string) (Storage, error) {
 	var clientMode aws.ClientLogMode
 	if s.verbose {
 		clientMode |= aws.LogRetries | aws.LogRequestWithBody | aws.LogRequestEventMessage | aws.LogResponse | aws.LogResponseEventMessage | aws.LogSigning

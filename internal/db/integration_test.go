@@ -55,8 +55,8 @@ func TestIntegration(t *testing.T) {
 	r.NoError(err)
 
 	extConn := &ExternalConn{
-		name:  "test-conn",
-		store: &testStore{},
+		name: "test-conn",
+		blob: &testBlobStorage{},
 	}
 	extConn.create(ctx, conn)
 	defer func() { a.NoError(extConn.Drop(ctx, conn)) }()

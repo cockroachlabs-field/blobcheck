@@ -63,7 +63,7 @@ const dropDbStmt = `DROP database IF EXISTS %[1]s CASCADE;`
 
 // Drop removes the database.
 func (d *Database) Drop(ctx *stopper.Context, conn *pgxpool.Conn) error {
-	slog.Info("Dropping database", slog.String("database", d.Name.String()))
+	slog.Debug("Dropping database", slog.String("database", d.Name.String()))
 	_, err := conn.Exec(ctx, fmt.Sprintf(dropDbStmt, d.Name))
 	return err
 }

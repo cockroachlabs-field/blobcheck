@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package store
+package blob
 
 import (
 	"fmt"
@@ -110,7 +110,7 @@ func TestS3Alternates(t *testing.T) {
 			}
 			gotSeq := s.candidateConfigs()
 			var got []Params
-			gotSeq(func(d Store) bool {
+			gotSeq(func(d Storage) bool {
 				if alt, ok := d.(*s3Store); ok {
 					got = append(got, alt.params)
 				}
@@ -269,14 +269,14 @@ func TestMinioFromEnv(t *testing.T) {
 				Testing:   true,
 			}
 
-			store, err := S3FromEnv(ctx, env)
+			blobStorage, err := S3FromEnv(ctx, env)
 			if tt.wantErr != nil {
-				assert.Nil(t, store)
+				assert.Nil(t, blobStorage)
 				assert.ErrorIs(t, err, tt.wantErr)
 				return
 			}
 			require.NoError(t, err)
-			s3 := (store.(*s3Store))
+			s3 := (blobStorage.(*s3Store))
 			assert.Equal(t, tt.want, s3.params)
 			assert.Regexp(t, fmt.Sprintf("^%s", testPath), s3.dest)
 		})

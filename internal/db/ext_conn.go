@@ -25,16 +25,16 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/field-eng-powertools/semver"
 	"github.com/cockroachdb/field-eng-powertools/stopper"
-	"github.com/cockroachlabs-field/blobcheck/internal/store"
+	"github.com/cockroachlabs-field/blobcheck/internal/blob"
 )
 
 // MinVersionForStats is the minimum version required for retrieving statistics.
 var MinVersionForStats = semver.MustSemver("v25.1.0")
 
-// ExternalConn represents an external connection to an object store.
+// ExternalConn represents an external connection to blob storage.
 type ExternalConn struct {
-	name  Ident
-	store store.Store
+	name Ident
+	blob blob.Storage
 }
 
 // Stats represents statistics about the external connection.
@@ -58,11 +58,11 @@ type TableBackup struct {
 
 // NewExternalConn creates a new external connection.
 func NewExternalConn(
-	ctx *stopper.Context, conn *pgxpool.Conn, store store.Store,
+	ctx *stopper.Context, conn *pgxpool.Conn, blob blob.Storage,
 ) (*ExternalConn, error) {
 	extConn := &ExternalConn{
-		name:  "_blobcheck_backup",
-		store: store,
+		name: "_blobcheck_backup",
+		blob: blob,
 	}
 	err := extConn.Drop(ctx, conn)
 	if err != nil {
@@ -79,7 +79,6 @@ func (c *ExternalConn) ListTableBackups(
 ) ([]string, error) {
 	res := make([]string, 0)
 	stmt := fmt.Sprintf(backupsStmt, c.String())
-	slog.Info(stmt)
 	rows, err := conn.Query(ctx, stmt)
 	if err != nil {
 		return nil, err
@@ -119,7 +118,7 @@ func (c *ExternalConn) BackupInfo(
 			return nil, err
 		}
 		t.Full = (backupType == "full")
-		slog.Info("backup info", "type", backupType, "full",
+		slog.Debug("backup info", "type", backupType, "full",
 			t.Full, "table", tableName, "schema", schemeName)
 		res = append(res, t)
 	}
@@ -129,22 +128,22 @@ func (c *ExternalConn) BackupInfo(
 const createExtConnStmt = `CREATE EXTERNAL CONNECTION '%[1]s' AS '%[2]s'`
 
 func (c *ExternalConn) create(ctx *stopper.Context, conn *pgxpool.Conn) error {
-	destURL := c.store.URL()
+	destURL := c.blob.URL()
 	stmt := fmt.Sprintf(createExtConnStmt, c.name, destURL)
-	slog.Info("trying", slog.String("url", destURL))
+	slog.Debug("trying", slog.String("url", destURL))
 	if _, err := conn.Exec(ctx, stmt); err != nil {
-		slog.Info("failed", slog.Any("error", err))
+		slog.Error("failed", slog.Any("error", err))
 		return err
 	}
-	slog.Info("checking existing backups")
+	slog.Debug("checking existing backups")
 	backups, err := c.ListTableBackups(ctx, conn)
 	if err == nil {
-		slog.Info("success",
+		slog.Debug("success",
 			slog.String("url", destURL),
 			slog.Any("existing", backups))
 		return nil
 	}
-	slog.Info("failed", slog.Any("error", err))
+	slog.Error("failed", slog.Any("error", err))
 	return errors.Newf("external connection failed")
 }
 
@@ -156,7 +155,7 @@ func (c *ExternalConn) Drop(ctx *stopper.Context, conn *pgxpool.Conn) error {
 	var name string
 	err := conn.QueryRow(ctx, fmt.Sprintf(showExtConnStmt, c.name)).Scan(&name)
 	if err == pgx.ErrNoRows {
-		slog.Info("external connection not found", slog.String("name", name))
+		slog.Debug("external connection not found", slog.String("name", name))
 		return nil
 	}
 	if err != nil {
@@ -204,6 +203,6 @@ func (c *ExternalConn) String() string {
 }
 
 // SuggestedParams returns the suggested parameters for the external connection.
-func (c *ExternalConn) SuggestedParams() map[string]string {
-	return c.store.Params()
+func (c *ExternalConn) SuggestedParams() blob.Params {
+	return c.blob.Params()
 }
