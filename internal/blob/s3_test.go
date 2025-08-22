@@ -25,7 +25,63 @@ import (
 	"github.com/cockroachlabs-field/blobcheck/internal/env"
 )
 
-func TestS3Alternates(t *testing.T) {
+func TestCombinations(t *testing.T) {
+	tests := []struct {
+		name     string
+		items    []string
+		expected [][]string
+	}{
+		{
+			name:  "empty",
+			items: []string{},
+			// Power set of empty set is { {} }
+			expected: [][]string{{}},
+		},
+		{
+			name:  "single",
+			items: []string{"a"},
+			expected: [][]string{
+				{},
+				{"a"},
+			},
+		},
+		{
+			name:  "three",
+			items: []string{"a", "b", "c"},
+			expected: [][]string{
+				{},
+				{"a"}, {"b"}, {"c"},
+				{"a", "b"}, {"a", "c"}, {"b", "c"},
+				{"a", "b", "c"},
+			},
+		},
+		{
+			name: "s3params",
+			items: []string{
+				SkipChecksum,
+				SkipTLSVerify,
+				UsePathStyleParam,
+			},
+			expected: [][]string{
+				{},
+				{SkipChecksum}, {SkipTLSVerify}, {UsePathStyleParam},
+				{SkipChecksum, SkipTLSVerify}, {SkipChecksum, UsePathStyleParam}, {SkipTLSVerify, UsePathStyleParam},
+				{SkipChecksum, SkipTLSVerify, UsePathStyleParam},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			a := assert.New(t)
+			got := combinations(tt.items)
+			a.ElementsMatch(got, tt.expected)
+		})
+	}
+}
+
+func TestCandidateConfigs(t *testing.T) {
 
 	tests := []struct {
 		name   string
@@ -46,6 +102,7 @@ func TestS3Alternates(t *testing.T) {
 				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-east-1", SkipChecksum: "true"},
 				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-east-1", SkipTLSVerify: "true"},
 				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-east-1", UsePathStyleParam: "true"},
+				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-east-1", SkipTLSVerify: "true", SkipChecksum: "true"},
 				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-east-1", UsePathStyleParam: "true", SkipChecksum: "true"},
 				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-east-1", UsePathStyleParam: "true", SkipTLSVerify: "true"},
 				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-east-1", UsePathStyleParam: "true", SkipTLSVerify: "true", SkipChecksum: "true"},
@@ -65,6 +122,7 @@ func TestS3Alternates(t *testing.T) {
 				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-west-2", EndPointParam: "https://s3.example.com", SkipChecksum: "true"},
 				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-west-2", EndPointParam: "https://s3.example.com", SkipTLSVerify: "true"},
 				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-west-2", EndPointParam: "https://s3.example.com", UsePathStyleParam: "true"},
+				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-west-2", EndPointParam: "https://s3.example.com", SkipTLSVerify: "true", SkipChecksum: "true"},
 				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-west-2", EndPointParam: "https://s3.example.com", UsePathStyleParam: "true", SkipChecksum: "true"},
 				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-west-2", EndPointParam: "https://s3.example.com", UsePathStyleParam: "true", SkipTLSVerify: "true"},
 				{AccountParam: "AKIA...", SecretParam: "SECRET...", RegionParam: "us-west-2", EndPointParam: "https://s3.example.com", UsePathStyleParam: "true", SkipTLSVerify: "true", SkipChecksum: "true"},
@@ -81,6 +139,7 @@ func TestS3Alternates(t *testing.T) {
 				{RegionParam: "eu-central-1", SkipChecksum: "true"},
 				{RegionParam: "eu-central-1", SkipTLSVerify: "true"},
 				{RegionParam: "eu-central-1", UsePathStyleParam: "true"},
+				{RegionParam: "eu-central-1", SkipTLSVerify: "true", SkipChecksum: "true"},
 				{RegionParam: "eu-central-1", UsePathStyleParam: "true", SkipChecksum: "true"},
 				{RegionParam: "eu-central-1", UsePathStyleParam: "true", SkipTLSVerify: "true"},
 				{RegionParam: "eu-central-1", UsePathStyleParam: "true", SkipTLSVerify: "true", SkipChecksum: "true"},
@@ -95,9 +154,29 @@ func TestS3Alternates(t *testing.T) {
 				{SkipChecksum: "true"},
 				{SkipTLSVerify: "true"},
 				{UsePathStyleParam: "true"},
+				{SkipTLSVerify: "true", SkipChecksum: "true"},
 				{UsePathStyleParam: "true", SkipChecksum: "true"},
 				{UsePathStyleParam: "true", SkipTLSVerify: "true"},
 				{UsePathStyleParam: "true", SkipTLSVerify: "true", SkipChecksum: "true"},
+			},
+		},
+		{
+			name: "toggle",
+			params: Params{
+				RegionParam:  "eu-central-1",
+				SkipChecksum: "true",
+			},
+			dest: "bucket3/key3",
+			want: []Params{
+				{RegionParam: "eu-central-1", SkipChecksum: "true"},
+				{RegionParam: "eu-central-1", SkipChecksum: "true", SkipTLSVerify: "true"},
+				{RegionParam: "eu-central-1", SkipChecksum: "true", UsePathStyleParam: "true"},
+				{RegionParam: "eu-central-1", SkipChecksum: "true", UsePathStyleParam: "true", SkipTLSVerify: "true"},
+
+				{RegionParam: "eu-central-1", SkipChecksum: "false"},
+				{RegionParam: "eu-central-1", SkipChecksum: "false", UsePathStyleParam: "true"},
+				{RegionParam: "eu-central-1", SkipChecksum: "false", SkipTLSVerify: "true"},
+				{RegionParam: "eu-central-1", SkipChecksum: "false", UsePathStyleParam: "true", SkipTLSVerify: "true"},
 			},
 		},
 	}
@@ -116,10 +195,8 @@ func TestS3Alternates(t *testing.T) {
 				}
 				return true
 			})
-			assert.Equal(t, len(tt.want), len(got), "s3.Alternates() count mismatch")
-			for i := range got {
-				assert.Equal(t, tt.want[i], got[i], "s3.Alternates()[%d] mismatch", i)
-			}
+			assert.Equal(t, len(tt.want), len(got), "candidateConfigs() count mismatch")
+			assert.ElementsMatch(t, tt.want, got, "candidateConfigs() elements mismatch")
 		})
 	}
 }
