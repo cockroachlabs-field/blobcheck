@@ -87,20 +87,35 @@ type s3Store struct {
 // It will try to connect to the S3 service using the environment variables provided,
 // and adding any parameters that are required.
 func S3FromEnv(ctx *stopper.Context, env *env.Env) (Storage, error) {
-	creds, ok := lookupEnv(env, []string{AccountParam, SecretParam}, []string{TokenParam, RegionParam})
-	if !ok {
-		return nil, ErrMissingParam
+	var params Params
+	var dest string
+	if env.URI != "" {
+		var err error
+		params, dest, err = extractFromURI(env.URI)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Println(params)
+	} else {
+		var ok bool
+		params, ok = lookupEnv(env, []string{AccountParam, SecretParam}, []string{TokenParam, RegionParam})
+		if !ok {
+			return nil, ErrMissingParam
+		}
+		if env.Endpoint != "" {
+			params[EndPointParam] = env.Endpoint
+		}
+		dest = env.Path
 	}
-	if env.Endpoint != "" {
-		creds[EndPointParam] = env.Endpoint
-	}
-	if _, ok := creds[RegionParam]; !ok {
-		creds[RegionParam] = DefaultRegion
+
+	if _, ok := params[RegionParam]; !ok {
+		params[RegionParam] = DefaultRegion
 	}
 	initial := &s3Store{
-		dest:    path.Join(env.Path, uuid.NewString()),
-		params:  creds,
+		dest:    path.Join(dest, uuid.NewString()),
+		params:  params,
 		testing: env.Testing,
+		verbose: env.Verbose,
 	}
 	return initial.try(ctx, initial.BucketName())
 }
@@ -142,26 +157,45 @@ func (s *s3Store) addParam(key string, value string) error {
 	return errors.Newf("invalid param %q", key)
 }
 
+// combinations returns all subsets (the power set) of the given slice
+func combinations(items []string) [][]string {
+	var result [][]string
+	n := len(items)
+	// total number of subsets = 2^n
+	total := 1 << n
+	for mask := 0; mask < total; mask++ {
+		subset := make([]string, 0)
+		for i := 0; i < n; i++ {
+			if mask&(1<<i) != 0 {
+				subset = append(subset, items[i])
+			}
+		}
+		result = append(result, subset)
+	}
+	return result
+}
+
 // candidateConfigs provides a set of candidate configurations for the S3 store.
 // TODO(silvano): consider making this public.
 func (s *s3Store) candidateConfigs() iter.Seq[Storage] {
 	return func(yield func(Storage) bool) {
-		combos := [][]string{
-			{}, // baseline first
-			{SkipChecksum},
-			{SkipTLSVerify},
-			{UsePathStyleParam},
-			{UsePathStyleParam, SkipChecksum},
-			{UsePathStyleParam, SkipTLSVerify},
-			{UsePathStyleParam, SkipTLSVerify, SkipChecksum},
-		}
+		combos := combinations([]string{
+			SkipChecksum,
+			SkipTLSVerify,
+			UsePathStyleParam,
+		})
+
 		for _, combo := range combos {
 			alt := &s3Store{
 				dest:   s.dest,
 				params: maps.Clone(s.params),
 			}
 			for _, option := range combo {
-				alt.addParam(option, "true")
+				if alt.params[option] == "true" {
+					alt.addParam(option, "false")
+				} else {
+					alt.addParam(option, "true")
+				}
 			}
 			if !yield(alt) {
 				return
@@ -185,9 +219,24 @@ func (s *s3Store) escapeValues() string {
 	return sb.String()
 }
 
+func extractFromURI(uri string) (Params, string, error) {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return nil, "", err
+	}
+	if parsed.Scheme != "s3" {
+		return nil, "", fmt.Errorf("unsupported scheme: %q", parsed.Scheme)
+	}
+	res := make(Params)
+	for k, v := range parsed.Query() {
+		res[k] = v[0]
+	}
+	return res, path.Join(parsed.Host, parsed.Path), nil
+}
+
 // lookupEnv retrieves required and optional environment variables from the provided environment.
-func lookupEnv(env *env.Env, required []string, optional []string) (map[string]string, bool) {
-	res := make(map[string]string)
+func lookupEnv(env *env.Env, required []string, optional []string) (Params, bool) {
+	res := make(Params)
 	for _, v := range required {
 		val, ok := env.LookupEnv(v)
 		if !ok {

@@ -14,6 +14,8 @@
 
 package main
 
+import "github.com/cockroachlabs-field/blobcheck/cmd"
+
 func main() {
-	// TODO (silvano): implement main
+	cmd.Execute()
 }

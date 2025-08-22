@@ -155,6 +155,7 @@ func (v *Validator) Clean(ctx *stopper.Context) error {
 // to asses minimum compatibility at the functional level.
 // This does not imply that a storage provider passing the test is supported.
 func (v *Validator) Validate(ctx *stopper.Context) (*Report, error) {
+	// TODO (silvano): add a progress writer "github.com/jedib0t/go-pretty/v6/progress"
 	conn, err := v.pool.Acquire(ctx)
 	if err != nil {
 		return nil, err

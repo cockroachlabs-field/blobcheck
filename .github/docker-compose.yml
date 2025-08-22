@@ -39,9 +39,9 @@ services:
       image: minio/minio
       healthcheck:
           test: ["CMD", "curl", "--fail", "http://localhost:29001/"]
-          interval: 30s
-          timeout: 10s
-          retries: 3
+          interval: 2s
+          timeout: 2s
+          retries: 10
           start_period: 5s
       command: server --console-address ":29001" --address ":29000" /data
       network_mode: host
