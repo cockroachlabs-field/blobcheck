@@ -25,16 +25,16 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/field-eng-powertools/semver"
 	"github.com/cockroachdb/field-eng-powertools/stopper"
-	"github.com/cockroachlabs-field/blobcheck/internal/store"
+	"github.com/cockroachlabs-field/blobcheck/internal/blob"
 )
 
 // MinVersionForStats is the minimum version required for retrieving statistics.
 var MinVersionForStats = semver.MustSemver("v25.1.0")
 
-// ExternalConn represents an external connection to an object store.
+// ExternalConn represents an external connection to blob storage.
 type ExternalConn struct {
-	name  Ident
-	store store.Store
+	name Ident
+	blob blob.Storage
 }
 
 // Stats represents statistics about the external connection.
@@ -58,11 +58,11 @@ type TableBackup struct {
 
 // NewExternalConn creates a new external connection.
 func NewExternalConn(
-	ctx *stopper.Context, conn *pgxpool.Conn, store store.Store,
+	ctx *stopper.Context, conn *pgxpool.Conn, blob blob.Storage,
 ) (*ExternalConn, error) {
 	extConn := &ExternalConn{
-		name:  "_blobcheck_backup",
-		store: store,
+		name: "_blobcheck_backup",
+		blob: blob,
 	}
 	err := extConn.Drop(ctx, conn)
 	if err != nil {
@@ -128,7 +128,7 @@ func (c *ExternalConn) BackupInfo(
 const createExtConnStmt = `CREATE EXTERNAL CONNECTION '%[1]s' AS '%[2]s'`
 
 func (c *ExternalConn) create(ctx *stopper.Context, conn *pgxpool.Conn) error {
-	destURL := c.store.URL()
+	destURL := c.blob.URL()
 	stmt := fmt.Sprintf(createExtConnStmt, c.name, destURL)
 	slog.Debug("trying", slog.String("url", destURL))
 	if _, err := conn.Exec(ctx, stmt); err != nil {
@@ -203,6 +203,6 @@ func (c *ExternalConn) String() string {
 }
 
 // SuggestedParams returns the suggested parameters for the external connection.
-func (c *ExternalConn) SuggestedParams() store.Params {
-	return c.store.Params()
+func (c *ExternalConn) SuggestedParams() blob.Params {
+	return c.blob.Params()
 }

@@ -25,9 +25,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cockroachdb/field-eng-powertools/stopper"
+	"github.com/cockroachlabs-field/blobcheck/internal/blob"
 	"github.com/cockroachlabs-field/blobcheck/internal/db"
 	"github.com/cockroachlabs-field/blobcheck/internal/env"
-	"github.com/cockroachlabs-field/blobcheck/internal/store"
 )
 
 const minioEndpoint = "localhost:29000"
@@ -58,22 +58,22 @@ func createMinioBucket(
 
 }
 
-// TestValidation performs a minimal validation test.
-func TestValidation(t *testing.T) {
+// TestMinio performs a minimal validation test against a MinIO instance.
+func TestMinio(t *testing.T) {
 	ctx := stopper.WithContext(t.Context())
 	r := require.New(t)
 	endpoint := fmt.Sprintf("http://%s", minioEndpoint)
-	vars := store.Params{
-		store.AccountParam: "cockroach",
-		store.SecretParam:  "cockroach",
-		store.RegionParam:  "us-east-1",
+	vars := blob.Params{
+		blob.AccountParam: "cockroach",
+		blob.SecretParam:  "cockroach",
+		blob.RegionParam:  "us-east-1",
 	}
-	expected := store.Params{
-		store.AccountParam:      "cockroach",
-		store.SecretParam:       store.Obfuscated,
-		store.RegionParam:       "us-east-1",
-		store.EndPointParam:     endpoint,
-		store.UsePathStyleParam: "true",
+	expected := blob.Params{
+		blob.AccountParam:      "cockroach",
+		blob.SecretParam:       blob.Obfuscated,
+		blob.RegionParam:       "us-east-1",
+		blob.EndPointParam:     endpoint,
+		blob.UsePathStyleParam: "true",
 	}
 	lookup := func(key string) (string, bool) {
 		val, ok := vars[key]
@@ -89,9 +89,9 @@ func TestValidation(t *testing.T) {
 		Testing:     true,
 	}
 	r.NoError(createMinioBucket(ctx, vars, env, bucketName))
-	store, err := store.S3FromEnv(ctx, env)
+	blobStorage, err := blob.S3FromEnv(ctx, env)
 	r.NoError(err)
-	validator, err := New(ctx, env, store)
+	validator, err := New(ctx, env, blobStorage)
 	r.NoError(err)
 	defer validator.Clean(ctx)
 	report, err := validator.Validate(ctx)

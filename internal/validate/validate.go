@@ -25,9 +25,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/field-eng-powertools/stopper"
+	"github.com/cockroachlabs-field/blobcheck/internal/blob"
 	"github.com/cockroachlabs-field/blobcheck/internal/db"
 	"github.com/cockroachlabs-field/blobcheck/internal/env"
-	"github.com/cockroachlabs-field/blobcheck/internal/store"
 	"github.com/cockroachlabs-field/blobcheck/internal/workload"
 )
 
@@ -39,20 +39,20 @@ const (
 
 // Report contains the results of a validation run.
 type Report struct {
-	SuggestedParams store.Params
+	SuggestedParams blob.Params
 	Stats           []*db.Stats
 }
 
 // Validator verifies backup/restore functionality
 type Validator struct {
 	pool                       *pgxpool.Pool
-	store                      store.Store
+	blobStorage                blob.Storage
 	sourceTable, restoredTable db.KvTable
 	latest                     string
 }
 
 // New creates a new Validator.
-func New(ctx *stopper.Context, env *env.Env, store store.Store) (*Validator, error) {
+func New(ctx *stopper.Context, env *env.Env, blobStorage blob.Storage) (*Validator, error) {
 	config, err := pgxpool.ParseConfig(env.DatabaseURL)
 	if err != nil {
 		return nil, err
@@ -93,9 +93,8 @@ func New(ctx *stopper.Context, env *env.Env, store store.Store) (*Validator, err
 		pool:          pool,
 		restoredTable: restoredTable,
 		sourceTable:   sourceTable,
-		store:         store,
+		blobStorage:   blobStorage,
 	}, nil
-
 }
 
 // checkBackups verifies that there is exactly one full and one incremental backup.
@@ -118,7 +117,7 @@ func (v *Validator) checkBackups(ctx *stopper.Context, extConn *db.ExternalConn)
 		return err
 	}
 	if len(info) != 2 {
-		return errors.Newf("expected exactly 2 backups (1 full, 1 incremental), got %d", len(info))
+		return errors.Newf("expected exactly 2 backups (1 full, 1 incremental), got %d backups", len(info))
 	}
 	fullCount := 0
 	for _, i := range info {
@@ -127,7 +126,7 @@ func (v *Validator) checkBackups(ctx *stopper.Context, extConn *db.ExternalConn)
 		}
 	}
 	if fullCount != 1 {
-		return errors.Errorf("expected one full backup and one incremental backup")
+		return errors.Newf("expected exactly 1 full backup, got %d", fullCount)
 	}
 	return nil
 
@@ -161,7 +160,7 @@ func (v *Validator) Validate(ctx *stopper.Context) (*Report, error) {
 		return nil, err
 	}
 	defer conn.Release()
-	extConn, err := db.NewExternalConn(ctx, conn, v.store)
+	extConn, err := db.NewExternalConn(ctx, conn, v.blobStorage)
 	if err != nil {
 		return nil, err
 	}
