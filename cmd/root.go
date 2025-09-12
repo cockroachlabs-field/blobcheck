@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -41,7 +42,7 @@ and integration with CockroachDB backup/restore workflows.
 It verifies that the storage provider is correctly configured, 
 runs synthetic workloads, and produces network performance statistics.`,
 	PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
-		if envConfig.DatabaseURL == "" {
+		if envConfig.DatabaseURL == "" && !envConfig.Guess {
 			return errors.New("database URL cannot be blank")
 		}
 		if envConfig.URI != "" {
@@ -74,7 +75,13 @@ func Execute() {
 	f.StringVar(&envConfig.Path, "path", envConfig.Path, "destination path (e.g. bucket/folder)")
 	f.StringVar(&envConfig.Endpoint, "endpoint", envConfig.Path, "http endpoint")
 	f.StringVar(&envConfig.URI, "uri", envConfig.URI, "S3 URI")
+	f.BoolVar(&envConfig.Guess, "guess", false, `perform a short test to guess suggested parameters:
+it only require access to the bucket; 
+it does not try to run a full backup/restore cycle 
+in the CockroachDB cluster.`)
 	f.CountVarP(&verbosity, "verbosity", "v", "increase logging verbosity to debug")
+	f.IntVar(&envConfig.Workers, "workers", 5, "number of concurrent workers")
+	f.DurationVar(&envConfig.WorkloadDuration, "workload-duration", 5*time.Second, "duration of the workload")
 	err := rootCmd.Execute()
 
 	if err != nil {

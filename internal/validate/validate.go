@@ -17,10 +17,7 @@ package validate
 
 import (
 	"log/slog"
-	"sync"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/cockroachdb/errors"
@@ -28,13 +25,13 @@ import (
 	"github.com/cockroachlabs-field/blobcheck/internal/blob"
 	"github.com/cockroachlabs-field/blobcheck/internal/db"
 	"github.com/cockroachlabs-field/blobcheck/internal/env"
-	"github.com/cockroachlabs-field/blobcheck/internal/workload"
 )
 
 const (
-	maxConns    = 10
-	workers     = 5
-	defaultTime = 5 * time.Second
+	maxConns                  = 10
+	expectedBackupCount       = 2
+	expectedBackupCollections = 1
+	expectedFullBackupCount   = 1
 )
 
 // Report contains the results of a validation run.
@@ -45,6 +42,7 @@ type Report struct {
 
 // Validator verifies backup/restore functionality
 type Validator struct {
+	env                        *env.Env
 	pool                       *pgxpool.Pool
 	blobStorage                blob.Storage
 	sourceTable, restoredTable db.KvTable
@@ -53,43 +51,39 @@ type Validator struct {
 
 // New creates a new Validator.
 func New(ctx *stopper.Context, env *env.Env, blobStorage blob.Storage) (*Validator, error) {
+	if err := preflight(ctx, env, blobStorage); err != nil {
+		return nil, err
+	}
+
 	config, err := pgxpool.ParseConfig(env.DatabaseURL)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to parse database URL")
 	}
 	config.MaxConns = maxConns
+
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to create database pool")
 	}
+
 	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to acquire database connection")
+	}
+	defer conn.Release()
+
+	sourceTable, err := createSourceTable(ctx, conn)
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Release()
-	source := db.Database{Name: "_blobcheck"}
-	if err := source.Create(ctx, conn); err != nil {
+
+	restoredTable, err := createRestoredTable(ctx, conn)
+	if err != nil {
 		return nil, err
 	}
-	// TODO (silvano): presplit table to have ranges in all nodes
-	sourceTable := db.KvTable{
-		Database: source,
-		Schema:   db.Public,
-		Name:     "mytable",
-	}
-	if err := sourceTable.Create(ctx, conn); err != nil {
-		return nil, err
-	}
-	dest := db.Database{Name: "_blobcheck_restored"}
-	if err := dest.Create(ctx, conn); err != nil {
-		return nil, err
-	}
-	restoredTable := db.KvTable{
-		Database: dest,
-		Schema:   db.Public,
-		Name:     "mytable",
-	}
+
 	return &Validator{
+		env:           env,
 		pool:          pool,
 		restoredTable: restoredTable,
 		sourceTable:   sourceTable,
@@ -97,56 +91,42 @@ func New(ctx *stopper.Context, env *env.Env, blobStorage blob.Storage) (*Validat
 	}, nil
 }
 
-// checkBackups verifies that there is exactly one full and one incremental backup.
-func (v *Validator) checkBackups(ctx *stopper.Context, extConn *db.ExternalConn) error {
-	conn, err := v.pool.Acquire(ctx)
-	if err != nil {
-		return err
+// preflight validates the input parameters for New.
+func preflight(ctx *stopper.Context, env *env.Env, blobStorage blob.Storage) error {
+	if env == nil {
+		return errors.New("environment cannot be nil")
 	}
-	defer conn.Release()
-	backups, err := extConn.ListTableBackups(ctx, conn)
-	if err != nil {
-		return err
+	if blobStorage == nil {
+		return errors.New("blob storage cannot be nil")
 	}
-	if len(backups) != 1 {
-		return errors.Newf("expected exactly 1 backup collection, got %d", len(backups))
+	if env.DatabaseURL == "" {
+		return errors.New("database URL cannot be empty")
 	}
-	v.latest = backups[0]
-	info, err := extConn.BackupInfo(ctx, conn, backups[0], v.sourceTable)
-	if err != nil {
-		return err
+	if env.Workers < 0 {
+		return errors.New("workers count cannot be negative")
 	}
-	if len(info) != 2 {
-		return errors.Newf("expected exactly 2 backups (1 full, 1 incremental), got %d backups", len(info))
-	}
-	fullCount := 0
-	for _, i := range info {
-		if i.Full {
-			fullCount++
-		}
-	}
-	if fullCount != 1 {
-		return errors.Newf("expected exactly 1 full backup, got %d", fullCount)
+	if env.WorkloadDuration <= 0 {
+		return errors.New("workload duration must be positive")
 	}
 	return nil
-
 }
 
 // Clean removes all resources created by the validator.
 func (v *Validator) Clean(ctx *stopper.Context) error {
-	conn, err := v.pool.Acquire(ctx)
+	conn, err := v.acquireConn(ctx)
 	if err != nil {
 		return err
 	}
 	defer conn.Release()
+
 	var e1, e2 error
 	if err := v.sourceTable.Database.Drop(ctx, conn); err != nil {
 		slog.Error("drop source DB", "err", err)
-		e1 = err
+		e1 = errors.Wrap(err, "failed to drop source database")
 	}
 	if err := v.restoredTable.Database.Drop(ctx, conn); err != nil {
 		slog.Error("drop restored DB", "err", err)
-		e2 = err
+		e2 = errors.Wrap(err, "failed to drop restored database")
 	}
 	return errors.Join(e1, e2)
 }
@@ -156,108 +136,45 @@ func (v *Validator) Clean(ctx *stopper.Context) error {
 // This does not imply that a storage provider passing the test is supported.
 func (v *Validator) Validate(ctx *stopper.Context) (*Report, error) {
 	// TODO (silvano): add a progress writer "github.com/jedib0t/go-pretty/v6/progress"
-	conn, err := v.pool.Acquire(ctx)
+	conn, err := v.acquireConn(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Release()
+
 	extConn, err := db.NewExternalConn(ctx, conn, v.blobStorage)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to create external connection")
 	}
 	defer extConn.Drop(ctx, conn)
-	slog.Info("capturing initial statistics")
-	// Capture initial stats
-	stats, err := extConn.Stats(ctx, conn)
+
+	stats, err := captureInitialStats(ctx, extConn, conn)
 	if err != nil {
 		return nil, err
 	}
 
-	// write some data
-	slog.Info("running workload to populate some data")
-	if err := v.runWorkload(ctx, defaultTime); err != nil {
+	if err := v.runWorkloadWithBackup(ctx, extConn); err != nil {
 		return nil, err
 	}
 
-	g := sync.WaitGroup{}
-	for w := range workers {
-		g.Add(1)
-		ctx.Go(func(ctx *stopper.Context) error {
-			defer g.Done()
-			slog.Info("starting", "worker", w)
-			return v.runWorkload(ctx, defaultTime)
-		})
-	}
-	g.Add(1)
-	ctx.Go(func(ctx *stopper.Context) error {
-		defer g.Done()
-		conn, err := v.pool.Acquire(ctx)
-		if err != nil {
-			return err
-		}
-		defer conn.Release()
-		slog.Info("starting full backup")
-		return v.sourceTable.Backup(ctx, conn, extConn, false)
-	})
-	g.Wait()
-	// Run an incremental backup
-	slog.Info("workers done")
-	slog.Info("starting incremental backup")
-	if err := v.sourceTable.Backup(ctx, conn, extConn, true); err != nil {
+	if err := v.runIncrementalBackup(ctx, conn, extConn); err != nil {
 		return nil, err
 	}
 
-	// Verify that we have the backups, then restore in a separate database.
 	if err := v.checkBackups(ctx, extConn); err != nil {
 		return nil, err
 	}
 
-	slog.Info("restoring backup")
-	if err := v.restoredTable.Restore(ctx, conn, extConn, &v.sourceTable); err != nil {
-		return nil, err
-	}
-	slog.Info("checking integrity")
-	originalBank, err := v.sourceTable.Fingerprint(ctx, conn)
-	if err != nil {
-		return nil, err
-	}
-	restore, err := v.restoredTable.Fingerprint(ctx, conn)
-	if err != nil {
+	if err := v.performRestore(ctx, conn, extConn); err != nil {
 		return nil, err
 	}
 
-	if originalBank != restore {
-		return nil, errors.Errorf("got %s, expected %s while comparing restoreDB with originalBank",
-			restore, originalBank)
+	if err := v.verifyIntegrity(ctx, conn); err != nil {
+		return nil, err
 	}
 
 	return &Report{
 		SuggestedParams: extConn.SuggestedParams(),
 		Stats:           stats,
 	}, nil
-}
-
-// runWorkload runs the bank workload for the specified duration.
-func (v *Validator) runWorkload(ctx *stopper.Context, duration time.Duration) error {
-	// TODO (silvano): if table is presplit, use prefix according to the split
-	w := workload.Workload{
-		Prefix: uuid.New().String(),
-		Table:  v.sourceTable,
-	}
-	done := make(chan bool)
-	ctx.Go(func(ctx *stopper.Context) error {
-		conn, err := v.pool.Acquire(ctx)
-		if err != nil {
-			return err
-		}
-		defer conn.Release()
-		return w.Run(ctx, conn, done)
-	})
-	select {
-	case <-time.Tick(duration):
-		// signal workload to stop
-		close(done)
-	case <-ctx.Stopping():
-	}
-	return nil
 }

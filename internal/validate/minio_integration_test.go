@@ -82,11 +82,13 @@ func TestMinio(t *testing.T) {
 
 	bucketName := fmt.Sprintf("bucket-%d", time.Now().UnixMilli())
 	var env = &env.Env{
-		DatabaseURL: "postgresql://root@localhost:26257?sslmode=disable",
-		Endpoint:    endpoint,
-		LookupEnv:   lookup,
-		Path:        bucketName,
-		Testing:     true,
+		DatabaseURL:      "postgresql://root@localhost:26257?sslmode=disable",
+		Endpoint:         endpoint,
+		LookupEnv:        lookup,
+		Path:             bucketName,
+		Testing:          true,
+		Workers:          5,
+		WorkloadDuration: 5 * time.Second,
 	}
 	r.NoError(createMinioBucket(ctx, vars, env, bucketName))
 	blobStorage, err := blob.S3FromEnv(ctx, env)
