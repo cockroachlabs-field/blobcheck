@@ -34,6 +34,12 @@ func command(env *env.Env) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if env.Guess {
+				format.Report(cmd.OutOrStdout(), &validate.Report{
+					SuggestedParams: store.Params(),
+				})
+				return nil
+			}
 			validator, err := validate.New(ctx, env, store)
 			if err != nil {
 				return err
