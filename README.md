@@ -10,21 +10,21 @@
 blobcheck s3 [flags]
 ```
 
-### Flags
-
-```
-  -h, --help   help for s3
-```
-
 ### Global Flags
 
-```
-      --db string         PostgreSQL connection URL 
-                          (default "postgresql://root@localhost:26257?sslmode=disable")
-      --endpoint string   http endpoint, if uri is not specified
-      --path string       destination path (e.g. bucket/folder), if uri is not specified
-      --uri string        in the [scheme]://[host]/[path]?[parameters] format
-      --verbose           increase logging verbosity to debug
+```text
+      --db string                    PostgreSQL connection URL (default "postgresql://root@localhost:26257?sslmode=disable")
+      --endpoint string              http endpoint
+      --guess                        perform a short test to guess suggested parameters:
+                                     it only require access to the bucket; 
+                                     it does not try to run a full backup/restore cycle 
+                                     in the CockroachDB cluster.
+  -h, --help                         help for blobcheck
+      --path string                  destination path (e.g. bucket/folder)
+      --uri string                   S3 URI
+  -v, --verbosity count              increase logging verbosity to debug
+      --workers int                  number of concurrent workers (default 5)
+      --workload-duration duration   duration of the workload (default 5s)
 ```
 
 ### Credentials
@@ -72,8 +72,9 @@ blobcheck s3 --uri 's3://mybucket/cluster1_backup?AWS_ACCESS_KEY_ID=..&AWS_SECRE
 ├──────┬────────────┬─────────────┬────────┤
 │ node │ read speed │ write speed │ status │
 ├──────┼────────────┼─────────────┼────────┤
-│    1 │ 100MB/s    │ 50MB/s      │ OK     │
-│    2 │ 200MB/s    │ 100MB/s     │ OK     │
+│    1 │ 103MB/s    │ 51MB/s      │ OK     │
+│    2 │ 101MB/s    │ 50MB/s      │ OK     │
+|    3 │ 100MB/s    │ 49MB/s      │ OK     │
 └──────┴────────────┴─────────────┴────────┘
 ```
 
