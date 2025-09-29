@@ -67,7 +67,7 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.39.0
+	github.com/aws/aws-sdk-go-v2 v1.39.2
 	github.com/aws/aws-sdk-go-v2/config v1.31.8
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.88.1
 	github.com/cockroachdb/errors v1.12.0
