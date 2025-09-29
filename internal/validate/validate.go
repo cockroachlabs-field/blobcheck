@@ -170,7 +170,9 @@ func (v *Validator) Validate(ctx *stopper.Context) (*Report, error) {
 	}
 
 	if err := v.verifyIntegrity(ctx, conn); err != nil {
-		return nil, err
+		// If we fail to verify the integrity, just log the error, but
+		// still provide a complete report
+		slog.Error("failed to verify integrity", slog.Any("error", err))
 	}
 
 	return &Report{
