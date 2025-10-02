@@ -33,6 +33,24 @@ func (v *Validator) acquireConn(ctx *stopper.Context) (*pgxpool.Conn, error) {
 	return conn, nil
 }
 
+// captureInitialStats captures initial database statistics.
+func (v *Validator) captureInitialStats(
+	ctx *stopper.Context, extConn *db.ExternalConn,
+) ([]*db.Stats, error) {
+	conn, err := v.acquireConn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Release()
+
+	slog.Info("capturing initial statistics")
+	stats, err := extConn.Stats(ctx, conn)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to capture initial statistics")
+	}
+	return stats, nil
+}
+
 // createSourceTable creates the source database and table.
 func createSourceTable(ctx *stopper.Context, conn *pgxpool.Conn) (db.KvTable, error) {
 	source := db.Database{Name: "_blobcheck"}
@@ -65,16 +83,4 @@ func createRestoredTable(ctx *stopper.Context, conn *pgxpool.Conn) (db.KvTable, 
 		Name:     "mytable",
 	}
 	return restoredTable, nil
-}
-
-// captureInitialStats captures initial database statistics.
-func captureInitialStats(
-	ctx *stopper.Context, extConn *db.ExternalConn, conn *pgxpool.Conn,
-) ([]*db.Stats, error) {
-	slog.Info("capturing initial statistics")
-	stats, err := extConn.Stats(ctx, conn)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to capture initial statistics")
-	}
-	return stats, nil
 }

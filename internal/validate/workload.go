@@ -33,6 +33,9 @@ func (v *Validator) runWorkloadWithBackup(ctx *stopper.Context, extConn *db.Exte
 	if err := v.runWorkload(ctx, v.env.WorkloadDuration); err != nil {
 		return errors.Wrap(err, "failed to run initial workload")
 	}
+	if ctx.IsStopping() {
+		return nil
+	}
 	return v.runConcurrentWorkloadAndBackup(ctx, extConn)
 }
 
@@ -45,8 +48,9 @@ func (v *Validator) runConcurrentWorkloadAndBackup(
 	for w := range v.env.Workers {
 		g.Add(1)
 		ctx.Go(func(ctx *stopper.Context) error {
+			slog.Info("starting", "worker", w)
 			defer g.Done()
-			return v.runWorkloadWorker(ctx, w)
+			return v.runWorkload(ctx, v.env.WorkloadDuration)
 		})
 	}
 
@@ -83,16 +87,6 @@ func (v *Validator) runWorkload(ctx *stopper.Context, duration time.Duration) er
 		// signal workload to stop
 		close(done)
 	case <-ctx.Stopping():
-	}
-	return nil
-}
-
-// runWorkloadWorker runs a single worker instance.
-func (v *Validator) runWorkloadWorker(ctx *stopper.Context, workerID int) error {
-	slog.Info("starting", "worker", workerID)
-	if err := v.runWorkload(ctx, v.env.WorkloadDuration); err != nil {
-		slog.Error("worker failed", "worker", workerID, "error", err)
-		return errors.Wrapf(err, "worker %d failed", workerID)
 	}
 	return nil
 }

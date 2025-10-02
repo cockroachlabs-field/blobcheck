@@ -17,8 +17,6 @@ package validate
 import (
 	"log/slog"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/field-eng-powertools/stopper"
 	"github.com/cockroachlabs-field/blobcheck/internal/db"
@@ -62,9 +60,13 @@ func (v *Validator) checkBackups(ctx *stopper.Context, extConn *db.ExternalConn)
 }
 
 // performRestore restores the backup to a separate database.
-func (v *Validator) performRestore(
-	ctx *stopper.Context, conn *pgxpool.Conn, extConn *db.ExternalConn,
-) error {
+func (v *Validator) performRestore(ctx *stopper.Context, extConn *db.ExternalConn) error {
+	conn, err := v.acquireConn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+
 	slog.Info("restoring backup")
 	if err := v.restoredTable.Restore(ctx, conn, extConn, &v.sourceTable); err != nil {
 		return errors.Wrap(err, "failed to restore backup")
@@ -88,9 +90,12 @@ func (v *Validator) runFullBackup(ctx *stopper.Context, extConn *db.ExternalConn
 }
 
 // runIncrementalBackup runs an incremental backup.
-func (v *Validator) runIncrementalBackup(
-	ctx *stopper.Context, conn *pgxpool.Conn, extConn *db.ExternalConn,
-) error {
+func (v *Validator) runIncrementalBackup(ctx *stopper.Context, extConn *db.ExternalConn) error {
+	conn, err := v.acquireConn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
 	slog.Info("starting incremental backup")
 	if err := v.sourceTable.Backup(ctx, conn, extConn, true); err != nil {
 		return errors.Wrap(err, "failed to create incremental backup")
@@ -99,7 +104,13 @@ func (v *Validator) runIncrementalBackup(
 }
 
 // verifyIntegrity checks that the restored data matches the original.
-func (v *Validator) verifyIntegrity(ctx *stopper.Context, conn *pgxpool.Conn) error {
+func (v *Validator) verifyIntegrity(ctx *stopper.Context) error {
+	conn, err := v.acquireConn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+
 	slog.Info("checking integrity")
 	original, err := v.sourceTable.Fingerprint(ctx, conn)
 	if err != nil {

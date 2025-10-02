@@ -77,6 +77,16 @@ func New(ctx *stopper.Context, env *env.Env, blobStorage blob.Storage) (*Validat
 		return nil, err
 	}
 
+	// Check for pending jobs on the source table
+	pendingJobs, err := sourceTable.PendingJobs(ctx, conn)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to check for pending jobs on source table")
+	}
+	if len(pendingJobs) > 0 {
+		slog.Error("pending jobs found on source table. Please review and cancel them.", slog.Any("job_ids", pendingJobs))
+		return nil, errors.New("pending jobs found on source table")
+	}
+
 	restoredTable, err := createRestoredTable(ctx, conn)
 	if err != nil {
 		return nil, err
@@ -113,6 +123,7 @@ func preflight(ctx *stopper.Context, env *env.Env, blobStorage blob.Storage) err
 
 // Clean removes all resources created by the validator.
 func (v *Validator) Clean(ctx *stopper.Context) error {
+	slog.Debug("Starting cleanup of validator resources")
 	conn, err := v.acquireConn(ctx)
 	if err != nil {
 		return err
@@ -120,15 +131,24 @@ func (v *Validator) Clean(ctx *stopper.Context) error {
 	defer conn.Release()
 
 	var e1, e2 error
+	slog.Debug("Dropping source database", slog.String("database", v.sourceTable.Database.String()))
 	if err := v.sourceTable.Database.Drop(ctx, conn); err != nil {
-		slog.Error("drop source DB", "err", err)
 		e1 = errors.Wrap(err, "failed to drop source database")
 	}
+	slog.Debug("Dropping restored database", slog.String("database", v.restoredTable.Database.String()))
 	if err := v.restoredTable.Database.Drop(ctx, conn); err != nil {
-		slog.Error("drop restored DB", "err", err)
 		e2 = errors.Wrap(err, "failed to drop restored database")
 	}
 	return errors.Join(e1, e2)
+}
+
+// validationStepFn is a function that performs a validation step.
+type validationStepFn func(ctx *stopper.Context, extConn *db.ExternalConn) error
+
+// validationStep represents a step in the validation process.
+type validationStep struct {
+	name string
+	fn   validationStepFn
 }
 
 // Validate performs a backup/restore against a storage provider
@@ -148,31 +168,55 @@ func (v *Validator) Validate(ctx *stopper.Context) (*Report, error) {
 	}
 	defer extConn.Drop(ctx, conn)
 
-	stats, err := captureInitialStats(ctx, extConn, conn)
-	if err != nil {
-		return nil, err
+	var stats []*db.Stats
+
+	// Define validation steps
+	steps := []validationStep{
+		{
+			name: "capture initial stats",
+			fn: func(ctx *stopper.Context, extConn *db.ExternalConn) error {
+				var err error
+				stats, err = v.captureInitialStats(ctx, extConn)
+				return err
+			},
+		},
+		{
+			name: "workload with backup",
+			fn:   v.runWorkloadWithBackup,
+		},
+		{
+			name: "incremental backup",
+			fn:   v.runIncrementalBackup,
+		},
+		{
+			name: "check backups",
+			fn:   v.checkBackups,
+		},
+		{
+			name: "restore",
+			fn:   v.performRestore,
+		},
+		{
+			name: "verify integrity",
+			fn: func(ctx *stopper.Context, extConn *db.ExternalConn) error {
+				if err := v.verifyIntegrity(ctx); err != nil {
+					// If we fail to verify the integrity, just log the error, but
+					// still provide a complete report
+					slog.Error("failed to verify integrity", slog.Any("error", err))
+				}
+				return nil
+			},
+		},
 	}
 
-	if err := v.runWorkloadWithBackup(ctx, extConn); err != nil {
-		return nil, err
-	}
-
-	if err := v.runIncrementalBackup(ctx, conn, extConn); err != nil {
-		return nil, err
-	}
-
-	if err := v.checkBackups(ctx, extConn); err != nil {
-		return nil, err
-	}
-
-	if err := v.performRestore(ctx, conn, extConn); err != nil {
-		return nil, err
-	}
-
-	if err := v.verifyIntegrity(ctx, conn); err != nil {
-		// If we fail to verify the integrity, just log the error, but
-		// still provide a complete report
-		slog.Error("failed to verify integrity", slog.Any("error", err))
+	// Execute steps
+	for _, step := range steps {
+		if ctx.IsStopping() {
+			return nil, ctx.Err()
+		}
+		if err := step.fn(ctx, extConn); err != nil {
+			return nil, errors.Wrapf(err, "failed during step: %s", step.name)
+		}
 	}
 
 	return &Report{

@@ -122,3 +122,28 @@ func (t *KvTable) Fingerprint(ctx *stopper.Context, conn *pgxpool.Conn) (string,
 	}
 	return b.String(), rows.Err()
 }
+
+const jobsStmt = `
+SELECT job_id
+FROM [SHOW JOBS]
+WHERE
+  NOT status = ANY (@status)
+  AND description LIKE @desc
+`
+
+var pendingStatues = []string{"succeeded", "failed"}
+
+// PendingJobs returns a list of job IDs that are still pending (not succeeded or failed).
+func (t *KvTable) PendingJobs(ctx *stopper.Context, conn *pgxpool.Conn) ([]int64, error) {
+	slog.Debug("Checking for pending jobs", slog.String("table", t.String()))
+	rows, err := conn.Query(ctx, jobsStmt, pgx.NamedArgs{
+		"status": pendingStatues,
+		"desc":   fmt.Sprintf("%%%s%%", t.Name),
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return pgx.CollectRows(rows, pgx.RowTo[int64])
+}
