@@ -15,6 +15,11 @@
 package s3
 
 import (
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/field-eng-powertools/stopper"
@@ -29,7 +34,22 @@ func command(env *env.Env) *cobra.Command {
 		Use:   "s3",
 		Short: "Performs a validation test for a s3 object store",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := stopper.WithContext(cmd.Context())
+			// Parent context for cleanup operations
+			parentCtx := stopper.WithContext(cmd.Context())
+			// Child context for validator operations that can be stopped
+			ctx := stopper.WithContext(parentCtx)
+
+			// Set up signal handler
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
+			defer signal.Stop(sigChan)
+
+			go func() {
+				sig := <-sigChan
+				slog.Info("Received signal, stopping validator", slog.String("signal", sig.String()))
+				ctx.Stop(0)
+			}()
+
 			store, err := blob.S3FromEnv(ctx, env)
 			if err != nil {
 				return err
@@ -44,12 +64,16 @@ func command(env *env.Env) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer validator.Clean(ctx)
+			// Use parent context for cleanup so it can access the database
+			defer validator.Clean(parentCtx)
+
 			report, err := validator.Validate(ctx)
 			if err != nil {
 				return err
 			}
-			format.Report(cmd.OutOrStdout(), report)
+			if report != nil {
+				format.Report(cmd.OutOrStdout(), report)
+			}
 			return nil
 		},
 	}
