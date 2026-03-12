@@ -1,6 +1,6 @@
 module github.com/cockroachlabs-field/blobcheck
 
-go 1.24.2
+go 1.25.8
 
 require (
 	github.com/cockroachdb/crlfmt v0.3.0
