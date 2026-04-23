@@ -1,9 +1,9 @@
 module github.com/cockroachlabs-field/blobcheck
 
-go 1.25.9
+go 1.26
 
 require (
-	github.com/cockroachdb/crlfmt v0.3.0
+	github.com/cockroachdb/crlfmt v0.4.0
 	github.com/google/addlicense v1.2.0
 	github.com/jackc/pgx/v5 v5.9.2
 	golang.org/x/lint v0.0.0-20241112194109-818c5a804067
