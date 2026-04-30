@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-FROM golang:1.25 AS builder
+FROM golang:1.26 AS builder
 WORKDIR /tmp/compile
 COPY . .
 RUN CGO_ENABLED=0 go build -v -ldflags="-s -w " -o /usr/bin/blobcheck .
