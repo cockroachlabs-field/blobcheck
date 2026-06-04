@@ -5,7 +5,7 @@ go 1.26.3
 require (
 	github.com/cockroachdb/crlfmt v0.4.0
 	github.com/google/addlicense v1.2.0
-	github.com/jackc/pgx/v5 v5.9.2
+	github.com/jackc/pgx/v5 v5.10.0
 	golang.org/x/lint v0.0.0-20241112194109-818c5a804067
 	honnef.co/go/tools v0.7.0
 )
