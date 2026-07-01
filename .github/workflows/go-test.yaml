@@ -26,12 +26,14 @@ jobs:
       matrix:
         include:
           # These are our primary supported versions.
-          - id: v25.2
-            cockroachdb: v25.2
-          - id: v25.1
-            cockroachdb: v25.1
           - id: v24.3
             cockroachdb: v24.3
+          - id: v25.2
+            cockroachdb: v25.2
+          - id: v25.4
+            cockroachdb: v25.4
+          - id: v26.2
+            cockroachdb: v26.2
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

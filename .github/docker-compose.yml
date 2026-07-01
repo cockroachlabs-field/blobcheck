@@ -21,16 +21,23 @@ services:
     command: start-single-node --insecure --store type=mem,size=2G
     network_mode: host
 
-  cockroachdb-v25.1:
-    profiles: ["v25.1"]
-    image: cockroachdb/cockroach:latest-v25.1
+  cockroachdb-v25.2:
+    profiles: ["v25.2"]
+    image: cockroachdb/cockroach:latest-v25.2
     entrypoint: /cockroach/cockroach
     command: start-single-node --insecure --store type=mem,size=2G
     network_mode: host
 
-  cockroachdb-v25.2:
-    profiles: ["v25.2"]
-    image: cockroachdb/cockroach:latest-v25.2
+  cockroachdb-v25.4:
+    profiles: ["v25.4"]
+    image: cockroachdb/cockroach:latest-v25.4
+    entrypoint: /cockroach/cockroach
+    command: start-single-node --insecure --store type=mem,size=2G
+    network_mode: host
+
+  cockroachdb-v26.2:
+    profiles: ["v26.2"]
+    image: cockroachdb/cockroach:latest-v26.2
     entrypoint: /cockroach/cockroach
     command: start-single-node --insecure --store type=mem,size=2G
     network_mode: host
