@@ -112,3 +112,52 @@ func TestMinio(t *testing.T) {
 		r.Equal(1, len(report.Stats))
 	}
 }
+
+// TestBackupErrorIsReported verifies that a failure in the concurrent
+// workload-and-backup step is returned to the caller instead of being silently
+// swallowed (regression test for #114).
+func TestBackupErrorIsReported(t *testing.T) {
+	ctx := stopper.WithContext(t.Context())
+	r := require.New(t)
+	endpoint := fmt.Sprintf("http://%s", minioEndpoint)
+	vars := blob.Params{
+		blob.AccountParam: "cockroach",
+		blob.SecretParam:  "cockroach",
+		blob.RegionParam:  "us-east-1",
+	}
+	lookup := func(key string) (string, bool) {
+		val, ok := vars[key]
+		return val, ok
+	}
+	bucketName := fmt.Sprintf("bucket-%d", time.Now().UnixMilli())
+	var env = &env.Env{
+		DatabaseURL:      "postgresql://root@localhost:26257?sslmode=disable",
+		Endpoint:         endpoint,
+		LookupEnv:        lookup,
+		Path:             bucketName,
+		Testing:          true,
+		Workers:          0,
+		WorkloadDuration: 1 * time.Second,
+	}
+	r.NoError(createMinioBucket(ctx, vars, env, bucketName))
+	blobStorage, err := blob.S3FromEnv(ctx, env)
+	r.NoError(err)
+	validator, err := New(ctx, env, blobStorage)
+	r.NoError(err)
+	// The backup failure below stops the stopper context, so clean up with a
+	// separate context that is still usable for database access.
+	cleanupCtx := stopper.WithContext(t.Context())
+	defer validator.Clean(cleanupCtx)
+
+	conn, err := validator.pool.Acquire(ctx)
+	r.NoError(err)
+	defer conn.Release()
+	extConn, err := db.NewExternalConn(ctx, conn, blobStorage)
+	r.NoError(err)
+
+	// Drop the external connection so the full backup fails deterministically,
+	// simulating a storage failure during the concurrent backup step.
+	r.NoError(extConn.Drop(ctx, conn))
+
+	r.Error(validator.runConcurrentWorkloadAndBackup(ctx, extConn))
+}

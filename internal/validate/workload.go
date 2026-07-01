@@ -43,27 +43,46 @@ func (v *Validator) runWorkloadWithBackup(ctx *stopper.Context, extConn *db.Exte
 func (v *Validator) runConcurrentWorkloadAndBackup(
 	ctx *stopper.Context, extConn *db.ExternalConn,
 ) error {
-	g := sync.WaitGroup{}
-	// Start worker goroutines
-	for w := range v.env.Workers {
+	var g sync.WaitGroup
+	var mu sync.Mutex
+	var errs []error
+
+	// run launches fn under the stopper and records any error it returns.
+	// If the stopper is already stopping and rejects the goroutine, the
+	// WaitGroup counter is released so that Wait does not block forever.
+	run := func(fn func(ctx *stopper.Context) error) {
 		g.Add(1)
-		ctx.Go(func(ctx *stopper.Context) error {
-			slog.Info("starting", "worker", w)
+		accepted := ctx.Go(func(ctx *stopper.Context) error {
 			defer g.Done()
+			err := fn(ctx)
+			if err != nil {
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+			}
+			return err
+		})
+		if !accepted {
+			g.Done()
+		}
+	}
+
+	// Start worker goroutines.
+	for w := range v.env.Workers {
+		run(func(ctx *stopper.Context) error {
+			slog.Info("starting", "worker", w)
 			return v.runWorkload(ctx, v.env.WorkloadDuration)
 		})
 	}
 
-	// Start backup goroutine
-	g.Add(1)
-	ctx.Go(func(ctx *stopper.Context) error {
-		defer g.Done()
+	// Start the full backup.
+	run(func(ctx *stopper.Context) error {
 		return v.runFullBackup(ctx, extConn)
 	})
 
 	g.Wait()
 	slog.Info("workers done")
-	return nil
+	return errors.Join(errs...)
 }
 
 // runWorkload runs a simple kv-style workload for the specified duration.
@@ -74,19 +93,31 @@ func (v *Validator) runWorkload(ctx *stopper.Context, duration time.Duration) er
 		Table:  v.sourceTable,
 	}
 	done := make(chan bool)
-	ctx.Go(func(ctx *stopper.Context) error {
+
+	var g sync.WaitGroup
+	var runErr error
+	g.Add(1)
+	accepted := ctx.Go(func(ctx *stopper.Context) error {
+		defer g.Done()
 		conn, err := v.pool.Acquire(ctx)
 		if err != nil {
+			runErr = err
 			return err
 		}
 		defer conn.Release()
-		return w.Run(ctx, conn, done)
+		runErr = w.Run(ctx, conn, done)
+		return runErr
 	})
+	if !accepted {
+		g.Done()
+	}
+
 	select {
 	case <-time.Tick(duration):
 		// signal workload to stop
 		close(done)
 	case <-ctx.Stopping():
 	}
-	return nil
+	g.Wait()
+	return runErr
 }
