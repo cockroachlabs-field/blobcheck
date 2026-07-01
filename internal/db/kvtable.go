@@ -102,6 +102,104 @@ func (t *KvTable) LocalName() string {
 	return strings.Join([]string{t.Schema.String(), string(t.Name)}, ".")
 }
 
+// hexSplitPoints returns ranges-1 evenly spaced hex-prefix boundaries that
+// divide the gen_random_uuid() keyspace into `ranges` roughly equal parts.
+// Returns nil when ranges < 2. Boundaries are 4 hex digits wide, giving 65536
+// distinct buckets, which is ample for any realistic node count.
+func hexSplitPoints(ranges int) []string {
+	if ranges < 2 {
+		return nil
+	}
+	const buckets = 0x10000
+	points := make([]string, 0, ranges-1)
+	for i := 1; i < ranges; i++ {
+		points = append(points, fmt.Sprintf("%04x", i*buckets/ranges))
+	}
+	return points
+}
+
+const splitTableStmt = `ALTER TABLE %[1]s SPLIT AT VALUES %[2]s`
+
+// Split presplits the table at the given primary-key boundaries.
+func (t *KvTable) Split(ctx *stopper.Context, conn *pgxpool.Conn, points []string) error {
+	if len(points) == 0 {
+		return nil
+	}
+	slog.Debug("splitting table", slog.String("table", t.String()), slog.Any("split_points", points))
+	quoted := make([]string, len(points))
+	for i, p := range points {
+		quoted[i] = fmt.Sprintf("('%s')", p)
+	}
+	stmt := fmt.Sprintf(splitTableStmt, t.String(), strings.Join(quoted, ", "))
+	_, err := conn.Exec(ctx, stmt)
+	return err
+}
+
+const scatterTableStmt = `ALTER TABLE %[1]s SCATTER`
+
+// Scatter distributes the table's ranges across the cluster nodes.
+func (t *KvTable) Scatter(ctx *stopper.Context, conn *pgxpool.Conn) error {
+	_, err := conn.Exec(ctx, fmt.Sprintf(scatterTableStmt, t.String()))
+	return err
+}
+
+// PresplitAndScatter presplits the table into `ranges` ranges and scatters
+// them across the cluster so that backup is more likely to exercise every node.
+func (t *KvTable) PresplitAndScatter(ctx *stopper.Context, conn *pgxpool.Conn, ranges int) error {
+	if err := t.Split(ctx, conn, hexSplitPoints(ranges)); err != nil {
+		return err
+	}
+	return t.Scatter(ctx, conn)
+}
+
+// hexSeedKeys returns one seed key per range, each positioned just above the
+// range's lower boundary. Seeding gives scattered ranges data to export so
+// backup is more likely to contact every node. The first range uses prefix
+// "0000"; subsequent ranges use the corresponding split boundary from
+// hexSplitPoints. Returns nil when ranges < 1.
+func hexSeedKeys(ranges int) []string {
+	if ranges < 1 {
+		return nil
+	}
+	points := hexSplitPoints(ranges) // len == ranges-1
+	prefixes := make([]string, ranges)
+	prefixes[0] = "0000"
+	for i, p := range points {
+		prefixes[i+1] = p
+	}
+	keys := make([]string, ranges)
+	for i, pfx := range prefixes {
+		// Construct a UUID-shaped string whose leading 4 hex chars match the
+		// range prefix so lexicographic ordering places it in the right range.
+		keys[i] = pfx + "0000-0000-0000-0000-000000000001"
+	}
+	return keys
+}
+
+// SeedRanges inserts one deterministic row per range so that scattered ranges
+// have data to export during backup. Call after PresplitAndScatter.
+func (t *KvTable) SeedRanges(ctx *stopper.Context, conn *pgxpool.Conn, ranges int) error {
+	for _, k := range hexSeedKeys(ranges) {
+		if err := t.Upsert(ctx, conn, k, "seed"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+const leaseholderCountStmt = `SELECT count(DISTINCT lease_holder) FROM [SHOW RANGES FROM TABLE %[1]s WITH DETAILS]`
+
+// LeaseholderCount returns the number of distinct nodes currently holding
+// leases for the table's ranges. Used to observe how SCATTER distributed the
+// ranges before a backup.
+func (t *KvTable) LeaseholderCount(ctx *stopper.Context, conn *pgxpool.Conn) (int, error) {
+	var n int
+	if err := conn.QueryRow(ctx, fmt.Sprintf(leaseholderCountStmt, t.String())).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 const fingerprintStmt = `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s`
 
 // Fingerprint returns a fingerprint for the table.

@@ -87,7 +87,6 @@ func (v *Validator) runConcurrentWorkloadAndBackup(
 
 // runWorkload runs a simple kv-style workload for the specified duration.
 func (v *Validator) runWorkload(ctx *stopper.Context, duration time.Duration) error {
-	// TODO (silvano): if table is presplit, use prefix according to the split
 	w := workload.Workload{
 		Prefix: uuid.New().String(),
 		Table:  v.sourceTable,

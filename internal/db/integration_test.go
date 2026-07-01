@@ -24,6 +24,31 @@ import (
 	"github.com/cockroachdb/field-eng-powertools/stopper"
 )
 
+// TestPresplitSingleNode verifies Split, Scatter, and LeaseholderCount on a single-node cluster.
+func TestPresplitSingleNode(t *testing.T) {
+	a := assert.New(t)
+	r := require.New(t)
+	ctx := stopper.WithContext(t.Context())
+	testEnv, err := NewTestEnv(ctx, 0)
+	r.NoError(err)
+	defer func() { a.NoError(testEnv.Cleanup(ctx)) }()
+	conn, err := testEnv.Pool.Acquire(ctx)
+	r.NoError(err)
+	defer conn.Release()
+
+	r.NoError(testEnv.KvTable.PresplitAndScatter(ctx, conn, 8))
+
+	var count int
+	r.NoError(conn.QueryRow(ctx,
+		fmt.Sprintf("SELECT count(*) FROM [SHOW RANGES FROM TABLE %s]", testEnv.KvTable.String()),
+	).Scan(&count))
+	a.GreaterOrEqual(count, 8, "expected at least 8 ranges after SPLIT AT")
+
+	leaseholders, err := testEnv.KvTable.LeaseholderCount(ctx, conn)
+	r.NoError(err)
+	a.Equal(1, leaseholders, "single-node cluster should have exactly 1 leaseholder")
+}
+
 // TestIntegration runs a tests to insure we can create database, table and external connection.
 // It tests the end-to-end functionality of the database layer.
 func TestIntegration(t *testing.T) {
