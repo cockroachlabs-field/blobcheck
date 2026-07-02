@@ -17,6 +17,7 @@ package validate
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -32,6 +33,9 @@ const (
 	expectedBackupCount       = 2
 	expectedBackupCollections = 1
 	expectedFullBackupCount   = 1
+
+	rangesPerNode = 3  // over-split so SCATTER lands a leaseholder on every node
+	defaultRanges = 16 // fallback when node count is unknown (CRDB < v25.1)
 )
 
 // Report contains the results of a validation run.
@@ -181,6 +185,12 @@ func (v *Validator) Validate(ctx *stopper.Context) (*Report, error) {
 			},
 		},
 		{
+			name: "presplit source table",
+			fn: func(ctx *stopper.Context, extConn *db.ExternalConn) error {
+				return v.presplitSourceTable(ctx, len(stats))
+			},
+		},
+		{
 			name: "workload with backup",
 			fn:   v.runWorkloadWithBackup,
 		},
@@ -223,4 +233,59 @@ func (v *Validator) Validate(ctx *stopper.Context) (*Report, error) {
 		SuggestedParams: extConn.SuggestedParams(),
 		Stats:           stats,
 	}, nil
+}
+
+// presplitSourceTable splits the source table into ranges and scatters them so
+// the backup exercises every node's connectivity to the object store. nodes is
+// the node count observed from the initial stats; 0 means it is unknown.
+func (v *Validator) presplitSourceTable(ctx *stopper.Context, nodes int) error {
+	if nodes == 1 {
+		// Single node: nothing to spread.
+		return nil
+	}
+	ranges := defaultRanges
+	if nodes > 1 {
+		ranges = nodes * rangesPerNode
+	}
+	conn, err := v.acquireConn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	slog.Info("presplitting and scattering source table",
+		slog.Int("nodes", nodes), slog.Int("ranges", ranges))
+	if err := v.sourceTable.PresplitAndScatter(ctx, conn, ranges); err != nil {
+		return err
+	}
+	// Wait up to one minute for leases to spread across nodes after SCATTER.
+	// Lease settling is best-effort: we log the result at Info and continue
+	// regardless of how many nodes were reached.
+	var leaseholders int
+	if nodes > 1 {
+		deadline := time.Now().Add(time.Minute)
+		for time.Now().Before(deadline) {
+			leaseholders, err = v.sourceTable.LeaseholderCount(ctx, conn)
+			if err != nil || leaseholders >= nodes {
+				break
+			}
+			select {
+			case <-time.After(500 * time.Millisecond):
+			case <-ctx.Stopping():
+				return nil
+			}
+		}
+	}
+	if err != nil {
+		slog.Debug("failed to read leaseholder distribution", slog.Any("error", err))
+	} else {
+		slog.Info("source table leaseholder distribution",
+			slog.Int("distinct_leaseholders", leaseholders), slog.Int("nodes", nodes))
+	}
+	// Seed one row per range so that scattered ranges have data to export during
+	// backup, making it more likely that every node's storage path is exercised.
+	slog.Debug("seeding source table ranges", slog.Int("ranges", ranges))
+	if err := v.sourceTable.SeedRanges(ctx, conn, ranges); err != nil {
+		return err
+	}
+	return nil
 }

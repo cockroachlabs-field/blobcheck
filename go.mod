@@ -3,6 +3,7 @@ module github.com/cockroachlabs-field/blobcheck
 go 1.26.4
 
 require (
+	github.com/cockroachdb/cockroach-go/v2 v2.4.3
 	github.com/cockroachdb/crlfmt v0.5.2
 	github.com/google/addlicense v1.2.0
 	github.com/jackc/pgx/v5 v5.10.0
@@ -37,12 +38,14 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/getsentry/sentry-go v0.46.0 // indirect
+	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.11 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	github.com/lib/pq v1.10.9 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect

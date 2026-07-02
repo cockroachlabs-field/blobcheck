@@ -58,7 +58,6 @@ func createSourceTable(ctx *stopper.Context, conn *pgxpool.Conn) (db.KvTable, er
 		return db.KvTable{}, errors.Wrap(err, "failed to create source database")
 	}
 
-	// TODO (silvano): presplit table to have ranges in all nodes
 	sourceTable := db.KvTable{
 		Database: source,
 		Schema:   db.Public,
