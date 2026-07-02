@@ -69,7 +69,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.26
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.104.1
 	github.com/cockroachdb/errors v1.13.0
-	github.com/cockroachdb/field-eng-powertools v0.2.0
+	github.com/cockroachdb/field-eng-powertools v0.2.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect

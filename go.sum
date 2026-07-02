@@ -46,8 +46,8 @@ github.com/cockroachdb/crlfmt v0.5.2 h1:oRU4j0tuuIuW1rfdAMY1TDW4K++86aVHwxq2h9C9
 github.com/cockroachdb/crlfmt v0.5.2/go.mod h1:fJ2Lp/cS/s84A7pvsuhtflmYJnz8JnxnjyIt5ZCigbo=
 github.com/cockroachdb/errors v1.13.0 h1:BoCcJeiP9hpBJDETkX19qi8Tb8So37srSsp3stTaDMQ=
 github.com/cockroachdb/errors v1.13.0/go.mod h1:bjxt/4E5+OyuAnacpTIU9rn2mzPu1VlthvHP+xpROq0=
-github.com/cockroachdb/field-eng-powertools v0.2.0 h1:9S+2hQXexZg24PP3Und9SRUWZUcojFeO5eerkNy/TWk=
-github.com/cockroachdb/field-eng-powertools v0.2.0/go.mod h1:+EhiP+YyVFPWlDKf+NaMfeDVOUBbFX6T0dk2VohoHHQ=
+github.com/cockroachdb/field-eng-powertools v0.2.1 h1:boc3OaBsCa+oUqRlFD0PMH17GYX0T3f48vyRsuCujPo=
+github.com/cockroachdb/field-eng-powertools v0.2.1/go.mod h1:ddW1e/7wHa9+9pc2Yq8XggA4Sq1dmLQ+WKfnbl9+uss=
 github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b h1:r6VH0faHjZeQy818SGhaone5OnYfxFR/+AzdY3sf5aE=
 github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
 github.com/cockroachdb/redact v1.1.5 h1:u1PMllDkdFfPWaNGMyLD1+so+aq3uUItthCFqzwPJ30=
