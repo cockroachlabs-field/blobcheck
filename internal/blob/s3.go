@@ -31,11 +31,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/google/uuid"
-
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/field-eng-powertools/stopper"
 	"github.com/cockroachlabs-field/blobcheck/internal/env"
+	"github.com/google/uuid"
 )
 
 const (
@@ -55,15 +54,20 @@ const (
 	SkipChecksum = "AWS_SKIP_CHECKSUM"
 	// SkipTLSVerify is the AWS skip TLS verify.
 	SkipTLSVerify = "AWS_SKIP_TLS_VERIFY"
+	// AuthParam tells CockroachDB how to authenticate with the storage provider.
+	AuthParam = "AUTH"
 
 	// DefaultRegion is the default AWS region.
 	DefaultRegion = "aws-global"
+	// AuthImplicit tells CockroachDB to use the node's own environment-based
+	// credentials (e.g. an IAM instance role) instead of expecting them in the URL.
+	AuthImplicit = "implicit"
 )
 
 // ValidParams lists the valid parameters for the S3 object storage.
 var ValidParams = []string{
 	AccountParam, SecretParam, TokenParam, EndPointParam,
-	RegionParam, UsePathStyleParam, SkipChecksum, SkipTLSVerify,
+	RegionParam, UsePathStyleParam, SkipChecksum, SkipTLSVerify, AuthParam,
 }
 
 var (
@@ -73,9 +77,6 @@ var (
 	Obfuscated = "******"
 )
 
-// ErrMissingParam is returned when required parameters are missing.
-var ErrMissingParam = errors.New("AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY must be set")
-
 type s3Store struct {
 	params  Params
 	dest    string
@@ -83,25 +84,22 @@ type s3Store struct {
 	verbose bool
 }
 
-// S3FromEnv creates a new S3 store from the environment.
-// It will try to connect to the S3 service using the environment variables provided,
-// and adding any parameters that are required.
-func S3FromEnv(ctx *stopper.Context, env *env.Env) (Storage, error) {
+// resolveParams builds the S3 store parameters and destination path from the
+// environment. It does not attempt to connect to the storage provider.
+func resolveParams(env *env.Env) (Params, string, error) {
 	var params Params
 	var dest string
 	if env.URI != "" {
 		var err error
 		params, dest, err = extractFromURI(env.URI)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		fmt.Println(params)
 	} else {
-		var ok bool
-		params, ok = lookupEnv(env, []string{AccountParam, SecretParam}, []string{TokenParam, RegionParam})
-		if !ok {
-			return nil, ErrMissingParam
-		}
+		// AccountParam and SecretParam are optional here. When absent, the
+		// AWS SDK's default credential chain (IAM role, shared credentials
+		// file, SSO, etc.) is used instead of static credentials.
+		params, _ = lookupEnv(env, nil, []string{AccountParam, SecretParam, TokenParam, RegionParam})
 		if env.Endpoint != "" {
 			params[EndPointParam] = env.Endpoint
 		}
@@ -110,6 +108,24 @@ func S3FromEnv(ctx *stopper.Context, env *env.Env) (Storage, error) {
 
 	if _, ok := params[RegionParam]; !ok {
 		params[RegionParam] = DefaultRegion
+	}
+	// When no explicit credentials were supplied, tell CockroachDB to use its
+	// own node-level credentials rather than expecting them in the URL.
+	_, hasAccount := params[AccountParam]
+	_, hasSecret := params[SecretParam]
+	if !hasAccount && !hasSecret {
+		params[AuthParam] = AuthImplicit
+	}
+	return params, dest, nil
+}
+
+// S3FromEnv creates a new S3 store from the environment.
+// It will try to connect to the S3 service using the environment variables provided,
+// and adding any parameters that are required.
+func S3FromEnv(ctx *stopper.Context, env *env.Env) (Storage, error) {
+	params, dest, err := resolveParams(env)
+	if err != nil {
+		return nil, err
 	}
 	initial := &s3Store{
 		dest:    path.Join(dest, uuid.NewString()),
@@ -313,7 +329,7 @@ func (s *s3Store) try(ctx context.Context, bucketName string) (Storage, error) {
 			o.UsePathStyle = usePathStyle
 		})
 
-		slog.Debug("Trying params", slog.Any("env", alt.Params()))
+		slog.Info("Trying params", slog.Any("env", alt.Params()))
 
 		if _, err := s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 			Bucket: aws.String(bucketName),
