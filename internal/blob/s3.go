@@ -31,10 +31,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/google/uuid"
+
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/field-eng-powertools/stopper"
 	"github.com/cockroachlabs-field/blobcheck/internal/env"
-	"github.com/google/uuid"
 )
 
 const (
@@ -281,6 +282,7 @@ func (s *s3Store) try(ctx context.Context, bucketName string) (Storage, error) {
 	if s.verbose {
 		clientMode |= aws.LogRetries | aws.LogRequestWithBody | aws.LogRequestEventMessage | aws.LogResponse | aws.LogResponseEventMessage | aws.LogSigning
 	}
+	var lastErr error
 	for alt := range s.candidateConfigs() {
 		params := alt.Params()
 		var loadOptions []func(options *config.LoadOptions) error
@@ -293,9 +295,6 @@ func (s *s3Store) try(ctx context.Context, bucketName string) (Storage, error) {
 			},
 		}
 		addLoadOption(config.WithHTTPClient(client))
-		if params[SkipTLSVerify] == "true" {
-			slog.Warn("TLS verification is disabled; use only for testing")
-		}
 		retryMaxAttempts := 1
 		addLoadOption(config.WithRetryMaxAttempts(retryMaxAttempts))
 		addLoadOption(config.WithClientLogMode(clientMode))
@@ -335,6 +334,7 @@ func (s *s3Store) try(ctx context.Context, bucketName string) (Storage, error) {
 			Bucket: aws.String(bucketName),
 		}); err != nil {
 			slog.Debug("Failed to list objects", slog.Any("error", err), slog.Any("env", alt.Params()))
+			lastErr = err
 			continue
 		}
 		// Build a probe key that includes the dest prefix (if any)
@@ -351,7 +351,8 @@ func (s *s3Store) try(ctx context.Context, bucketName string) (Storage, error) {
 			Body:   strings.NewReader(content), // Use a reader for the content
 		}
 		if _, err := s3Client.PutObject(ctx, input); err != nil {
-			slog.Error("Failed to put object", slog.Any("error", err), slog.Any("env", alt.Params()))
+			slog.Debug("Failed to put object", slog.Any("error", err), slog.Any("env", alt.Params()))
+			lastErr = err
 			continue
 		}
 		result, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
@@ -379,7 +380,10 @@ func (s *s3Store) try(ctx context.Context, bucketName string) (Storage, error) {
 			return nil, err
 		}
 		slog.Debug("Suggested params", slog.Any("env", alt.Params()))
+		if params[SkipTLSVerify] == "true" {
+			slog.Warn("TLS verification is disabled; use only for testing")
+		}
 		return alt, nil
 	}
-	return nil, fmt.Errorf("unable to connect to storage provider %q", s.dest)
+	return nil, fmt.Errorf("unable to connect to storage provider %q: %w", s.dest, lastErr)
 }
