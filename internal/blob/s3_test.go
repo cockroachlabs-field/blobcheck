@@ -267,38 +267,131 @@ const (
 	testPath = "test/minio"
 )
 
-func TestMinioFromEnv(t *testing.T) {
+func TestResolveParams(t *testing.T) {
 	tests := []struct {
-		name     string
-		env      map[string]string
-		endpoint string
-		want     Params
-		wantErr  error
+		name string
+		env  *env.Env
+		want Params
 	}{
 		{
-			name:     "missing required env vars",
-			env:      map[string]string{},
-			endpoint: endpoint,
-			want:     map[string]string{},
-			wantErr:  ErrMissingParam,
+			name: "no credentials falls back to implicit auth",
+			env: &env.Env{
+				Path:     testPath,
+				Endpoint: endpoint,
+				LookupEnv: func(string) (string, bool) {
+					return "", false
+				},
+			},
+			want: Params{
+				RegionParam:   DefaultRegion,
+				EndPointParam: endpoint,
+				AuthParam:     AuthImplicit,
+			},
 		},
 		{
-			name: "missing secret",
+			// A lone key is treated as a specified-auth misconfiguration, not
+			// implicit auth, so CRDB reports the missing counterpart clearly
+			// instead of silently ignoring the key the user did provide.
+			name: "partial credentials do not set AUTH",
+			env: &env.Env{
+				Path:     testPath,
+				Endpoint: endpoint,
+				LookupEnv: func(key string) (string, bool) {
+					if key == AccountParam {
+						return account, true
+					}
+					return "", false
+				},
+			},
+			want: Params{
+				AccountParam:  account,
+				RegionParam:   DefaultRegion,
+				EndPointParam: endpoint,
+			},
+		},
+		{
+			name: "explicit credentials do not set AUTH",
+			env: &env.Env{
+				Path:     testPath,
+				Endpoint: endpoint,
+				LookupEnv: func(key string) (string, bool) {
+					switch key {
+					case AccountParam:
+						return account, true
+					case SecretParam:
+						return secret, true
+					default:
+						return "", false
+					}
+				},
+			},
+			want: Params{
+				AccountParam:  account,
+				SecretParam:   secret,
+				RegionParam:   DefaultRegion,
+				EndPointParam: endpoint,
+			},
+		},
+		{
+			name: "bare URI falls back to implicit auth",
+			env: &env.Env{
+				URI: "s3://mybucket/mypath",
+			},
+			want: Params{
+				RegionParam: DefaultRegion,
+				AuthParam:   AuthImplicit,
+			},
+		},
+		{
+			name: "URI with explicit credentials does not set AUTH",
+			env: &env.Env{
+				URI: fmt.Sprintf("s3://mybucket/mypath?%s=%s&%s=%s", AccountParam, account, SecretParam, secret),
+			},
+			want: Params{
+				AccountParam: account,
+				SecretParam:  secret,
+				RegionParam:  DefaultRegion,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params, _, err := resolveParams(tt.env)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, params)
+		})
+	}
+}
+
+func TestMinioFromEnv(t *testing.T) {
+	tests := []struct {
+		name           string
+		env            map[string]string
+		endpoint       string
+		want           Params
+		wantConnectErr bool
+	}{
+		{
+			name:           "missing required env vars falls back to default credential chain",
+			env:            map[string]string{},
+			endpoint:       endpoint,
+			wantConnectErr: true,
+		},
+		{
+			name: "missing secret falls back to default credential chain",
 			env: map[string]string{
 				AccountParam: account,
 			},
-			endpoint: endpoint,
-			want:     Params{},
-			wantErr:  ErrMissingParam,
+			endpoint:       endpoint,
+			wantConnectErr: true,
 		},
 		{
-			name: "missing account",
+			name: "missing account falls back to default credential chain",
 			env: map[string]string{
 				SecretParam: secret,
 			},
-			endpoint: endpoint,
-			want:     Params{},
-			wantErr:  ErrMissingParam,
+			endpoint:       endpoint,
+			wantConnectErr: true,
 		},
 		{
 			name: "no region param",
@@ -347,9 +440,9 @@ func TestMinioFromEnv(t *testing.T) {
 			}
 
 			blobStorage, err := S3FromEnv(ctx, env)
-			if tt.wantErr != nil {
+			if tt.wantConnectErr {
 				assert.Nil(t, blobStorage)
-				assert.ErrorIs(t, err, tt.wantErr)
+				assert.ErrorContains(t, err, "unable to connect to storage provider")
 				return
 			}
 			require.NoError(t, err)

@@ -29,13 +29,23 @@ blobcheck s3 [flags]
 
 ### Credentials
 
-Credentials must be provided in one of the locations supported by `config.LoadDefaultConfig`.  
-For example, they can be exported before running:
+`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` are optional. If set, they are used as-is:
 
 ```bash
 export AWS_ACCESS_KEY_ID=..
 export AWS_SECRET_ACCESS_KEY=..
 ```
+
+If not set, `blobcheck` itself resolves credentials via the AWS SDK's default
+credential chain (`config.LoadDefaultConfig`), which honors `AWS_PROFILE`,
+shared config/credentials files, SSO, an EC2/ECS instance role, etc.
+
+Note this only covers `blobcheck`'s own connectivity check. The actual
+`BACKUP`/`RESTORE` statements run on the CockroachDB cluster itself, so when no
+explicit credentials are passed, `blobcheck` tells CockroachDB to use `AUTH=implicit`
+— meaning the **CockroachDB nodes** need their own way to authenticate (e.g. an
+IAM instance role attached to the nodes), independent of whatever credentials
+resolve `blobcheck` locally.
 
 ---
 

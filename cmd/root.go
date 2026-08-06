@@ -16,7 +16,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -41,6 +40,8 @@ var rootCmd = &cobra.Command{
 and integration with CockroachDB backup/restore workflows. 
 It verifies that the storage provider is correctly configured, 
 runs synthetic workloads, and produces network performance statistics.`,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
 		if envConfig.DatabaseURL == "" && !envConfig.Guess {
 			return errors.New("database URL cannot be blank")
@@ -85,7 +86,7 @@ in the CockroachDB cluster.`)
 	err := rootCmd.Execute()
 
 	if err != nil {
-		fmt.Println(err)
+		slog.Error(err.Error())
 		os.Exit(1)
 	}
 }
