@@ -106,3 +106,8 @@ func (t *testBlobStorage) Params() blob.Params {
 func (t *testBlobStorage) URL() string {
 	return externalURL
 }
+
+// Warnings implements blob.BlobStorage.
+func (t *testBlobStorage) Warnings() []string {
+	return nil
+}

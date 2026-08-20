@@ -38,6 +38,16 @@ func Report(w io.Writer, report *validate.Report) {
 		}
 		t.Render()
 	}
+	if len(report.Warnings) > 0 {
+		t := table.NewWriter()
+		t.SetOutputMirror(w)
+		t.SetTitle("Warnings")
+		t.SetStyle(style)
+		for _, warning := range report.Warnings {
+			t.AppendRow(table.Row{warning})
+		}
+		t.Render()
+	}
 	if report.Stats != nil {
 		t := table.NewWriter()
 		t.SetOutputMirror(w)

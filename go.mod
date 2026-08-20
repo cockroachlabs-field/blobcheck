@@ -3,6 +3,7 @@ module github.com/cockroachlabs-field/blobcheck
 go 1.26.4
 
 require (
+	github.com/aws/smithy-go v1.27.8
 	github.com/cockroachdb/cockroach-go/v2 v2.4.3
 	github.com/cockroachdb/crlfmt v0.5.2
 	github.com/google/addlicense v1.2.0
@@ -29,7 +30,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.33.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.38.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.6 // indirect
-	github.com/aws/smithy-go v1.27.8 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.0.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
