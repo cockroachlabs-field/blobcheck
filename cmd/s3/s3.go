@@ -57,6 +57,7 @@ func command(env *env.Env) *cobra.Command {
 			if env.Guess {
 				format.Report(cmd.OutOrStdout(), &validate.Report{
 					SuggestedParams: store.Params(),
+					Warnings:        store.Warnings(),
 				})
 				return nil
 			}

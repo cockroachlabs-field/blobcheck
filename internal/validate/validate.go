@@ -42,6 +42,9 @@ const (
 type Report struct {
 	SuggestedParams blob.Params
 	Stats           []*db.Stats
+	// Warnings lists known compatibility issues detected against the storage
+	// provider that still apply to the CockroachDB version under test.
+	Warnings []string
 }
 
 // Validator verifies backup/restore functionality
@@ -51,6 +54,7 @@ type Validator struct {
 	blobStorage                blob.Storage
 	sourceTable, restoredTable db.KvTable
 	latest                     string
+	warnings                   []string
 }
 
 // New creates a new Validator.
@@ -177,6 +181,10 @@ func (v *Validator) Validate(ctx *stopper.Context) (*Report, error) {
 	// Define validation steps
 	steps := []validationStep{
 		{
+			name: "check known compatibility issues",
+			fn:   v.checkKnownCompatibilityIssues,
+		},
+		{
 			name: "capture initial stats",
 			fn: func(ctx *stopper.Context, extConn *db.ExternalConn) error {
 				var err error
@@ -232,6 +240,7 @@ func (v *Validator) Validate(ctx *stopper.Context) (*Report, error) {
 	return &Report{
 		SuggestedParams: extConn.SuggestedParams(),
 		Stats:           stats,
+		Warnings:        v.warnings,
 	}, nil
 }
 

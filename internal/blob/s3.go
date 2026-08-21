@@ -31,6 +31,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/google/uuid"
 
 	"github.com/cockroachdb/errors"
@@ -83,6 +84,13 @@ type s3Store struct {
 	dest    string
 	testing bool
 	verbose bool
+
+	// multiCharDelimiterUnsupported is set when the storage provider rejects
+	// a List call using a delimiter longer than one character, e.g. AliCloud
+	// OSS. CockroachDB currently sends "data/" as the delimiter (see
+	// backupbase.ListingDelimDataSlash) when checking for existing backups
+	// and locating incremental/deprecated backup paths.
+	multiCharDelimiterUnsupported bool
 }
 
 // resolveParams builds the S3 store parameters and destination path from the
@@ -163,6 +171,20 @@ func (s *s3Store) URL() string {
 	res := s.escapeValues()
 	res = fmt.Sprintf("s3://%s?%s", s.dest, res)
 	return res
+}
+
+// multiCharDelimiterWarning is returned by Warnings when the storage
+// provider does not accept a multi-character List delimiter.
+const multiCharDelimiterWarning = `storage provider rejects List calls with a multi-character delimiter (e.g. AliCloud OSS); ` +
+	`CockroachDB currently sends "data/" as the delimiter when checking for existing backups and locating ` +
+	`incremental/deprecated backup paths, so backups and restores against this endpoint may fail`
+
+// Warnings implements BlobStorage.
+func (s *s3Store) Warnings() []string {
+	if s.multiCharDelimiterUnsupported {
+		return []string{multiCharDelimiterWarning}
+	}
+	return nil
 }
 
 // addParam adds a parameter to the S3 store.
@@ -383,7 +405,45 @@ func (s *s3Store) try(ctx context.Context, bucketName string) (Storage, error) {
 		if params[SkipTLSVerify] == "true" {
 			slog.Warn("TLS verification is disabled; use only for testing")
 		}
+		// The bare ListObjectsV2 call above (with no Delimiter) already succeeded against
+		// this bucket and client, so if adding a multi-character delimiter now causes a
+		// client error, the delimiter itself is the only thing that changed and can be
+		// held responsible, regardless of which S3-compatible provider is on the other end
+		// or how it phrases the error.
+		if _, err := s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:    aws.String(bucketName),
+			Delimiter: aws.String(multiCharDelimiterProbe),
+			MaxKeys:   aws.Int32(1),
+		}); err != nil {
+			if isDelimiterRejected(err) {
+				slog.Warn("storage provider does not support multi-character List delimiters", slog.Any("error", err))
+				if altStore, ok := alt.(*s3Store); ok {
+					altStore.multiCharDelimiterUnsupported = true
+				}
+			} else {
+				slog.Debug("multi-character delimiter probe failed for an unrelated reason", slog.Any("error", err))
+			}
+		}
 		return alt, nil
 	}
 	return nil, fmt.Errorf("unable to connect to storage provider %q: %w", s.dest, lastErr)
+}
+
+// multiCharDelimiterProbe mirrors CockroachDB's backupbase.ListingDelimDataSlash constant,
+// which is used as the S3 List delimiter when checking for existing backups and locating
+// incremental/deprecated backup paths.
+const multiCharDelimiterProbe = "data/"
+
+// isDelimiterRejected reports whether err is an HTTP 400 (Bad Request) response. It is only
+// meaningful when called after an equivalent request without a delimiter has already
+// succeeded against the same bucket and client (see the caller in try()), which lets a 400
+// here be attributed to the delimiter parameter itself rather than to any provider-specific
+// error code or message. This keeps detection provider agnostic: it works the same way for
+// AliCloud OSS or any other S3-compatible provider that enforces a similar restriction.
+func isDelimiterRejected(err error) bool {
+	var respErr *smithyhttp.ResponseError
+	if !errors.As(err, &respErr) {
+		return false
+	}
+	return respErr.HTTPStatusCode() == http.StatusBadRequest
 }
