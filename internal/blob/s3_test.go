@@ -15,70 +15,15 @@
 package blob
 
 import (
-	"errors"
 	"fmt"
-	"net/http"
 	"testing"
 
-	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cockroachdb/field-eng-powertools/stopper"
 	"github.com/cockroachlabs-field/blobcheck/internal/env"
 )
-
-func responseError(statusCode int) error {
-	return &smithyhttp.ResponseError{
-		Response: &smithyhttp.Response{Response: &http.Response{StatusCode: statusCode}},
-		Err:      errors.New("request failed"),
-	}
-}
-
-func TestIsDelimiterRejected(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "bad request, e.g. AliCloud OSS rejecting the delimiter",
-			err:  responseError(http.StatusBadRequest),
-			want: true,
-		},
-		{
-			name: "forbidden is not attributed to the delimiter",
-			err:  responseError(http.StatusForbidden),
-			want: false,
-		},
-		{
-			name: "not found is not attributed to the delimiter",
-			err:  responseError(http.StatusNotFound),
-			want: false,
-		},
-		{
-			name: "server error is not attributed to the delimiter",
-			err:  responseError(http.StatusInternalServerError),
-			want: false,
-		},
-		{
-			name: "not an http response error",
-			err:  errors.New("connection refused"),
-			want: false,
-		},
-		{
-			name: "nil error",
-			err:  nil,
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, isDelimiterRejected(tt.err))
-		})
-	}
-}
 
 func TestCombinations(t *testing.T) {
 	tests := []struct {
@@ -504,9 +449,6 @@ func TestMinioFromEnv(t *testing.T) {
 			s3 := (blobStorage.(*s3Store))
 			assert.Equal(t, tt.want, s3.params)
 			assert.Regexp(t, fmt.Sprintf("^%s", testPath), s3.dest)
-			// MinIO supports multi-character List delimiters, so no compatibility
-			// warning should be raised against it.
-			assert.Empty(t, blobStorage.Warnings())
 		})
 	}
 }

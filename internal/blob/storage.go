@@ -51,8 +51,4 @@ type Storage interface {
 	URL() string
 	// BucketName returns the name of the bucket.
 	BucketName() string
-	// Warnings returns human-readable notices about known compatibility
-	// issues detected against this storage provider. It returns nil if none
-	// were found.
-	Warnings() []string
 }
