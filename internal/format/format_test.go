@@ -112,6 +112,23 @@ func TestReport(t *testing.T) {
 				}},
 			goldenOutput: "two_nodes",
 		},
+		{
+			name: "with warning",
+			report: &validate.Report{
+				SuggestedParams: blob.Params{
+					blob.AccountParam:  "AKIA...",
+					blob.SecretParam:   blob.Obfuscated,
+					blob.RegionParam:   "us-west-1",
+					blob.EndPointParam: "https://s3.oss-us-west-1.aliyuncs.com",
+				},
+				Warnings: []string{
+					`storage provider rejects List calls with a multi-character delimiter (e.g. AliCloud OSS); ` +
+						`CockroachDB currently sends "data/" as the delimiter when checking for existing backups and locating ` +
+						`incremental/deprecated backup paths, so backups and restores against this endpoint may fail`,
+				},
+			},
+			goldenOutput: "with_warning",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

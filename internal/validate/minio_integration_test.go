@@ -86,7 +86,6 @@ func TestMinio(t *testing.T) {
 		Endpoint:         endpoint,
 		LookupEnv:        lookup,
 		Path:             bucketName,
-		Testing:          true,
 		Workers:          5,
 		WorkloadDuration: 5 * time.Second,
 	}
@@ -135,7 +134,6 @@ func TestBackupErrorIsReported(t *testing.T) {
 		Endpoint:         endpoint,
 		LookupEnv:        lookup,
 		Path:             bucketName,
-		Testing:          true,
 		Workers:          0,
 		WorkloadDuration: 1 * time.Second,
 	}

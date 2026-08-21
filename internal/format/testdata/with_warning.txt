@@ -1,0 +1,19 @@
+┌───────────────────────────────────────────────────────────────┐
+│ Suggested Parameters                                          │
+├───────────────────────┬───────────────────────────────────────┤
+│ parameter             │ value                                 │
+├───────────────────────┼───────────────────────────────────────┤
+│ AWS_ACCESS_KEY_ID     │ AKIA...                               │
+│ AWS_ENDPOINT          │ https://s3.oss-us-west-1.aliyuncs.com │
+│ AWS_REGION            │ us-west-1                             │
+│ AWS_SECRET_ACCESS_KEY │ ******                                │
+└───────────────────────┴───────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│ Warnings                                                               │
+├────────────────────────────────────────────────────────────────────────┤
+│ storage provider rejects List calls with a multi-character delimiter   │
+│ (e.g. AliCloud OSS); CockroachDB currently sends "data/" as the        │
+│ delimiter when checking for existing backups and locating              │
+│ incremental/deprecated backup paths, so backups and restores against   │
+│ this endpoint may fail                                                 │
+└────────────────────────────────────────────────────────────────────────┘

@@ -26,7 +26,6 @@ type Env struct {
 	Guess            bool          // Guess the URL parameters, no validation.
 	LookupEnv        LookupEnv     // allows injection of environment variable lookup for testing
 	Path             string        // the S3 bucket path
-	Testing          bool          // enables testing mode
 	URI              string        // the S3 object URI (if not provided,will be constructed from Endpoint and Path)
 	Verbose          bool          // enables verbose logging
 	Workers          int           // number of concurrent workers
