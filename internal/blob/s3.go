@@ -82,7 +82,6 @@ var (
 type s3Store struct {
 	params  Params
 	dest    string
-	testing bool
 	verbose bool
 
 	// multiCharDelimiterUnsupported is set when the storage provider rejects
@@ -139,7 +138,6 @@ func S3FromEnv(ctx *stopper.Context, env *env.Env) (Storage, error) {
 	initial := &s3Store{
 		dest:    path.Join(dest, uuid.NewString()),
 		params:  params,
-		testing: env.Testing,
 		verbose: env.Verbose,
 	}
 	return initial.try(ctx, initial.BucketName())
@@ -320,13 +318,17 @@ func (s *s3Store) try(ctx context.Context, bucketName string) (Storage, error) {
 		retryMaxAttempts := 1
 		addLoadOption(config.WithRetryMaxAttempts(retryMaxAttempts))
 		addLoadOption(config.WithClientLogMode(clientMode))
-		// TODO (silvano) - consider removing testing guard
-		// LoadDefaultConfig will always honor env based provided credentials if present.
-		if s.testing {
+		// Static credentials supplied via --uri or flags (e.g. AWS_ACCESS_KEY_ID)
+		// live only in s.params, not in the process environment, so they must be
+		// wired in explicitly rather than relying on the SDK's default credential
+		// chain to discover them. When neither is set, AuthImplicit is in effect
+		// and LoadDefaultConfig falls through to its normal chain (env vars,
+		// shared config, IAM role, etc).
+		if account, secret := s.params[AccountParam], s.params[SecretParam]; account != "" || secret != "" {
 			addLoadOption(config.WithCredentialsProvider(aws.CredentialsProviderFunc(func(ctx context.Context) (aws.Credentials, error) {
 				return aws.Credentials{
-					AccessKeyID:     s.params[AccountParam],
-					SecretAccessKey: s.params[SecretParam],
+					AccessKeyID:     account,
+					SecretAccessKey: secret,
 					SessionToken:    s.params[TokenParam],
 				}, nil
 			})))
@@ -339,8 +341,8 @@ func (s *s3Store) try(ctx context.Context, bucketName string) (Storage, error) {
 		usePathStyle := params[UsePathStyleParam] == "true"
 		skipChecksum := params[SkipChecksum] == "true"
 		if skipChecksum {
-			config.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenSupported
-			config.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenSupported
+			config.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+			config.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
 		}
 		s3Client := s3.NewFromConfig(config, func(o *s3.Options) {
 			if ep := params[EndPointParam]; ep != "" {

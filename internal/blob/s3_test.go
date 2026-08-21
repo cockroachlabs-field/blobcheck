@@ -491,7 +491,6 @@ func TestMinioFromEnv(t *testing.T) {
 				Path:      testPath,
 				Endpoint:  tt.endpoint,
 				LookupEnv: lookup,
-				Testing:   true,
 			}
 
 			blobStorage, err := S3FromEnv(ctx, env)

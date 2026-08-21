@@ -23,6 +23,10 @@ import (
 	"github.com/cockroachlabs-field/blobcheck/internal/validate"
 )
 
+// warningColumnWidth caps the Warnings table column so long warning
+// messages wrap instead of stretching a single line to the terminal width.
+const warningColumnWidth = 70
+
 // Report generates a report from the validation results.
 func Report(w io.Writer, report *validate.Report) {
 	style := table.StyleLight
@@ -43,6 +47,9 @@ func Report(w io.Writer, report *validate.Report) {
 		t.SetOutputMirror(w)
 		t.SetTitle("Warnings")
 		t.SetStyle(style)
+		t.SetColumnConfigs([]table.ColumnConfig{
+			{Number: 1, WidthMax: warningColumnWidth, WidthMaxEnforcer: text.WrapSoft},
+		})
 		for _, warning := range report.Warnings {
 			t.AppendRow(table.Row{warning})
 		}
