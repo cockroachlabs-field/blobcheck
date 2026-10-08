@@ -68,7 +68,7 @@ require (
 require (
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/config v1.33.6
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.4
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.0
 	github.com/cockroachdb/errors v1.14.0
 	github.com/cockroachdb/field-eng-powertools v0.2.1
 	github.com/google/uuid v1.6.0
