@@ -1,6 +1,6 @@
 module github.com/cockroachlabs-field/blobcheck
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/aws/smithy-go v1.28.5
