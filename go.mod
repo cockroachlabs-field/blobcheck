@@ -7,7 +7,7 @@ require (
 	github.com/cockroachdb/cockroach-go/v2 v2.4.3
 	github.com/cockroachdb/crlfmt v0.5.2
 	github.com/google/addlicense v1.2.0
-	github.com/jackc/pgx/v5 v5.11.0
+	github.com/jackc/pgx/v5 v5.11.1-0.20261024200143-fa2327dde4ca
 	golang.org/x/lint v0.0.0-20241112194109-818c5a804067
 	honnef.co/go/tools v0.8.2
 )
@@ -74,7 +74,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/jackc/puddle/v2 v2.2.3 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.8.3
 	github.com/minio/minio-go/v7 v7.4.1
 	github.com/spf13/cobra v1.10.2
